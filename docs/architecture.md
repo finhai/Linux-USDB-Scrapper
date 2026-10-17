@@ -16,7 +16,7 @@ Each concern has a sibling package under src/usdb_scrapper:
 - controllers: application orchestration and translation to view-facing state.
 - frontend: Qt views; backend operations go through controllers.
 
-Packages are deliberately empty until their card is implemented. The entry point
+Packages remain empty until their card is implemented; domain now exports SongEntry. The entry point
 wires dependencies. Import public APIs, never another component's private modules.
 Network and download work must not block the GUI thread; dispatch through workers
 and deliver state changes to the GUI thread via Qt signals.
