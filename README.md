@@ -3,7 +3,7 @@
 A Python + PySide6 desktop application for Linux and Windows, planned in
 [Trello](https://trello.com/b/KnffFXKA/usdb-scrapper-linux).
 
-Current status: development foundation only. The window launches; search, login,
+Current status: development foundation and SongEntry domain model. The window launches; search, login,
 downloads, and library management are not implemented yet.
 
 ## Start developing
@@ -34,6 +34,6 @@ See [contributing](CONTRIBUTING.md), [architecture](docs/architecture.md),
 
 ## Next work
 
-Complete and review this foundation, then implement the Song Entry domain model
-(card 9). Investigate USDB authentication in an isolated spike (card 14) before
+Review the Song Entry model (card 9), then implement the UltraStar TXT in-memory
+model (card 10). Investigate USDB authentication in an isolated spike (card 14) before
 building the session client. Keep live credentials and session captures out of Git.
