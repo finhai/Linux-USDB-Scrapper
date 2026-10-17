@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "usdb-scrapper-linux"
+version = "0.1.0.dev0"
+description = "Desktop UltraStar library manager for Linux and Windows"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = ["PySide6>=6.8,<7"]
+
+[project.scripts]
+usdb-scrapper = "usdb_scrapper.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1", "mypy>=1.15,<2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/usdb_scrapper"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
