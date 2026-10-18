@@ -38,9 +38,26 @@ without that denial and with a same-origin logout link, plus PHPSESSID in the ja
 A failed or inconclusive run does not prove browser extraction is necessary;
 credentials, rate limiting, or changed page markers could also be responsible.
 
-## Result
+## Result — confirmed
 
-Pending the user's manual authenticated run. No production login mechanism has
-been proven yet. Card 14 stays open until its result is recorded. The next step
-is card 15 only once a successful mechanism is demonstrated. Session expiration,
-secure credential persistence, and automated retries are separate later cards.
+On 2026-10-18 the user ran the probe locally with valid credentials and supplied
+its non-sensitive JSON summary. The baseline required login; after the credential
+POST the protected listing no longer required login and contained a same-origin
+logout link. PHPSESSID was present before and after login, and
+`plain_http_login_confirmed` was true.
+
+Conclusion: plain HTTPS form login with an in-memory cookie jar works for the
+tested account and current site. Browser-cookie extraction is not required for
+this flow. The result is user-observed live evidence, not an automated CI login.
+No credentials, cookie values, or authenticated page contents were retained.
+
+Card 15 should implement a normal HTTP session: fetch the login form, POST its
+credentials/controls, retain cookies, and verify protected content. Do not treat
+HTTP 200 or cookie presence alone as success. The current probe supplies evidence
+for this design but is not the production client.
+
+Session expiry, invalid-credential behavior, rate limits, secure credential
+persistence, and automatic retries remain unverified or separate later work.
+Search normalization still needs actual authenticated query/result comparisons;
+this successful login alone does not complete card 12. Card 14 is ready for review
+and can be marked Done once its research PR is merged.
