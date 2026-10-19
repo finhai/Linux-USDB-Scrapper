@@ -1,8 +1,8 @@
 # Combined search and sort investigation — card 18
 
 Known from the board: the listing endpoint accepts POST fields `interpret`
-(artist), `title`, and `details=1`. Their combined semantics and actual sort
-parameters remain unverified. Do not implement guessed server parameters.
+(artist), `title`, and `details=1`. The observations below verify combined filtering for one example and ID sort
+direction. Other sort fields are discovered but not empirically checked.
 
 Run `scripts/probe_usdb_search.py` locally with hidden credential prompts. It uses
 the verified session client, keeps cookies in memory, and emits a JSON summary.
@@ -24,8 +24,8 @@ actual controls are known, validate ascending/descending order against result ro
 The requested UI state rule is settled: selecting a new field starts ascending;
 selecting the same field again toggles direction.
 
-Status: probe and synthetic extraction tests prepared; authenticated evidence
-pending. Card 18 remains WorkingOn. This branch depends only on session-client
+Status: two authenticated probe runs recorded below; search request API and sort
+state implemented. Parsing, pagination and GUI work remain separate. This branch depends only on session-client
 PR #8, not the later expiry/retry branches. Its smaller test count reflects that
 branch base, not removal of tests. CI requires retargeting to dev after #8 merges.
 
@@ -49,3 +49,30 @@ resets start to zero, reports echoed filter values, captures ud controls and tes
 up to two discovered direction values using order=id. It includes a title-only
 positive control after the negative case. It reports numeric candidate order;
 result-row scoping remains a limitation. No guessed direction values are sent.
+
+## Corrected authenticated observation — 2026-10-19
+
+With explicit artist/title fields, combined ABBA + Dancing Queen again returned
+3289 and the unmatched artist returned no candidates. The positive title-only
+control after the negative returned six candidates, as before. Echoed input values
+were always empty, including successful queries, so they cannot prove filter state.
+
+The discovered ud options are asc and desc. With order=id and title=Dancing Queen:
+asc returned [876, 3289, 4609, 9328, 13620, 23827]; desc returned exactly the reverse.
+This verifies direction for ID sorting on this sample. Other sort fields were
+observed in controls but their collation and tie-breaking are not yet verified.
+The four normalization variants still yielded no candidates; this is not evidence
+that removing punctuation/accents is safe. Card 12 remains unverified.
+
+## Search API
+
+SearchClient(session).search_html(SearchQuery(artist="ABBA", title="Dancing Queen"))
+posts both filters with details=1, start=0, order=id and ud=asc by default. Text is
+preserved exactly; no unverified normalization is applied. SortState.select(field)
+returns a new state: first selection ascending, repeat toggles, new field ascending.
+All observed sort fields are enumerated, including creator mapped to autor.
+
+The API returns first-page HTML in server order. It does not yet parse SongEntry
+records, paginate, or expose GUI controls; those remain subsequent cards. Never
+log the returned HTML. Automated tests cover request construction and state changes;
+the user's probe establishes the underlying live protocol, not an end-to-end GUI test.

@@ -1,5 +1,12 @@
 """Public USDB session API."""
 
+from usdb_scrapper.usdb_client.search import (
+    SearchClient,
+    SearchQuery,
+    SortDirection,
+    SortField,
+    SortState,
+)
 from usdb_scrapper.usdb_client.session import (
     AuthenticationError,
     LoginFormError,
@@ -8,4 +15,15 @@ from usdb_scrapper.usdb_client.session import (
     UsdbSession,
 )
 
-__all__ = ["AuthenticationError", "LoginFormError", "TransportError", "UsdbError", "UsdbSession"]
+__all__ = [
+    "SearchClient",
+    "SearchQuery",
+    "SortDirection",
+    "SortField",
+    "SortState",
+    "AuthenticationError",
+    "LoginFormError",
+    "TransportError",
+    "UsdbError",
+    "UsdbSession",
+]
