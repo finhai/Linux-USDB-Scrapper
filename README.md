@@ -35,6 +35,6 @@ See [contributing](CONTRIBUTING.md), [architecture](docs/architecture.md),
 
 ## Next work
 
-Verify the [session client](docs/session-client.md) against USDB, then continue the
-authentication/search cards. Production-client live acceptance is pending.
+The [session client](docs/session-client.md) passed real-site login and subsequent
+request verification. Continue with the remaining authentication/search cards.
 Keep credentials and session captures out of Git.
