@@ -29,8 +29,9 @@ credential storage, reauthentication and parsers remain separate cards.
 
 27 offline tests cover cookie reuse, protected-page verification, failed re-login,
 expiry, redirects, untrusted destinations, changed forms, errors and cleanup.
-Production-client live acceptance is pending; the successful spike is not a
-substitute for testing this client. Run this command in your terminal:
+Production-client live acceptance passed on 2026-10-19. The maintainer ran the
+client check against USDB and reported login_verified=true and
+subsequent_request_succeeded=true. No credentials or cookies were recorded. Run this command in your terminal:
 
 ```sh
 cd /home/faule/MySoftware/Linux-USDB-Scrapper && .venv/bin/python scripts/check_usdb_session.py
