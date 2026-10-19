@@ -39,3 +39,25 @@ cd /home/faule/MySoftware/Linux-USDB-Scrapper && .venv/bin/python scripts/check_
 
 Enter credentials only at hidden prompts. Share only the JSON summary. Both
 login_verified and subsequent_request_succeeded must be true.
+
+## Session expiry — card 16
+
+Authenticated requests raise SessionExpiredError (an AuthenticationError subtype)
+on HTTP 401/403, a redirect to the login endpoint, the USDB user/pass login form,
+or the site's login-required message. Login redirects are stopped before another
+request is sent, including 307/308 redirects that would otherwise replay POST data.
+Cookies and the authenticated flag are cleared, and subsequent requests fail
+locally until login succeeds again. Initial login failure remains AuthenticationError.
+
+HTTP 429/5xx and network failures remain TransportError and do not claim expiry.
+A missing logout link alone is not enough: authenticated fragments may omit it.
+Detection covers these known signals; an unrelated or redesigned HTML page needs
+validation by its future content parser. HTTP 403 is conservatively treated as
+requiring login; it does not prove the server's underlying reason for denying access.
+
+Offline acceptance uses a deliberately invalid cookie and checks both GET and
+POST expiry paths, cleanup, no retry, and successful explicit re-login. This does
+not claim a new live-site expiry experiment. Automatic reauthentication is card 17.
+
+This feature branch depends on the session-client PR #8. Merge that PR first;
+retarget this feature PR to dev afterward.

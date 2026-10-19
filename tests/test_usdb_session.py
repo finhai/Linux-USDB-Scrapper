@@ -8,6 +8,7 @@ import pytest
 from usdb_scrapper.usdb_client import (
     AuthenticationError,
     LoginFormError,
+    SessionExpiredError,
     TransportError,
     UsdbError,
     UsdbSession,
@@ -51,7 +52,11 @@ class Server:
                     "set-cookie": "PHPSESSID=authenticated; Path=/; Secure",
                 },
             )
-        if self.fail_login or self.expired:
+        if (
+            self.fail_login
+            or self.expired
+            or "PHPSESSID=authenticated" not in request.headers.get("cookie", "")
+        ):
             return httpx.Response(200, text="You are not logged in. Login to use this function.")
         assert "PHPSESSID=authenticated" in request.headers.get("cookie", "")
         return httpx.Response(200, text=PROTECTED)
@@ -235,3 +240,87 @@ def test_login_requires_positive_same_origin_evidence(verification):
     with UsdbSession(transport=httpx.MockTransport(handler)) as session:
         with pytest.raises(AuthenticationError):
             login(session)
+
+
+@pytest.mark.parametrize("method", ["GET", "POST"])
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, text=FORM),
+        httpx.Response(200, text="You are <b>not</b> logged\n in. Login to use this function."),
+        httpx.Response(401),
+        httpx.Response(403),
+        *[
+            httpx.Response(status, headers={"location": "/?link=login"})
+            for status in (301, 302, 303, 307, 308)
+        ],
+    ],
+)
+def test_expiry_signals_clear_session_without_retry(method, response):
+    server = Server()
+    expired = False
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return response if expired else server(request)
+
+    with UsdbSession(transport=httpx.MockTransport(handler)) as session:
+        login(session)
+        expired = True
+        before = len(calls)
+        with pytest.raises(SessionExpiredError):
+            if method == "GET":
+                session.get_html()
+            else:
+                session.post_html("/?link=list", {"title": "sample"})
+        assert len(calls) == before + 1
+        assert not session.authenticated
+        assert not list(session._client.cookies.jar)
+        with pytest.raises(AuthenticationError):
+            session.get_html()
+        assert len(calls) == before + 1
+        expired = False
+        login(session)
+        assert session.get_html() == PROTECTED
+
+
+@pytest.mark.parametrize("status", [429, 500, 503])
+def test_server_errors_do_not_claim_session_expired(status):
+    server = Server()
+    failing = False
+
+    def handler(request):
+        return httpx.Response(status) if failing else server(request)
+
+    with UsdbSession(transport=httpx.MockTransport(handler)) as session:
+        login(session)
+        failing = True
+        with pytest.raises(TransportError):
+            session.get_html()
+        assert session.authenticated
+
+
+def test_missing_logout_or_unrelated_password_form_does_not_imply_expiry():
+    server = Server()
+    content = None
+
+    def handler(request):
+        return httpx.Response(200, text=content) if content is not None else server(request)
+
+    with UsdbSession(transport=httpx.MockTransport(handler)) as session:
+        login(session)
+        content = '<form><input type="password" name="new_password"></form>'
+        assert session.get_html() == content
+        assert session.authenticated
+
+
+def test_deliberately_invalid_cookie_is_detected(setup):
+    session, server = setup
+    login(session)
+    session._client.cookies.clear()
+    session._client.cookies.set("PHPSESSID", "invalid", domain="usdb.animux.de", path="/")
+    with pytest.raises(SessionExpiredError):
+        session.get_html()
+    assert "PHPSESSID=invalid" in server.requests[-1].headers["cookie"]
+    assert not session.authenticated

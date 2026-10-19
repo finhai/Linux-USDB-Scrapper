@@ -21,6 +21,10 @@ class AuthenticationError(UsdbError):
     """Authentication was required or could not be confirmed."""
 
 
+class SessionExpiredError(AuthenticationError):
+    """A previously authenticated request requires login again."""
+
+
 class TransportError(UsdbError):
     """Network, HTTP, or redirect failure."""
 
@@ -66,14 +70,17 @@ class _Page(HTMLParser):
 
     @property
     def denied(self) -> bool:
-        return "not logged in" in " ".join(self.text).lower()
+        return "you are not logged in" in " ".join(" ".join(self.text).lower().split())
 
     @property
     def has_login_form(self) -> bool:
         return any(
-            (item.get("type") or "").lower() == "password"
+            {"user", "pass"}.issubset({item.get("name") for item in form.inputs})
+            and any(
+                item.get("name") == "pass" and (item.get("type") or "").lower() == "password"
+                for item in form.inputs
+            )
             for form in self.forms
-            for item in form.inputs
         )
 
     @property
@@ -205,21 +212,30 @@ class UsdbSession:
         if not self.authenticated:
             raise AuthenticationError("Login is required")
         try:
-            response = self._request(method, urljoin(ORIGIN + "/", path), fields)
+            response = self._request(
+                method, urljoin(ORIGIN + "/", path), fields, authenticated_request=True
+            )
             page = _Page(response.text)
             if page.denied or page.has_login_form:
-                raise AuthenticationError("USDB requires login again")
+                raise SessionExpiredError("USDB requires login again")
         except AuthenticationError:
             self._forget_session()
-            raise
+            raise SessionExpiredError("USDB requires login again") from None
         return response.text
 
     def _request(
-        self, method: str, url: str, fields: dict[str, str] | None = None
+        self,
+        method: str,
+        url: str,
+        fields: dict[str, str] | None = None,
+        *,
+        authenticated_request: bool = False,
     ) -> httpx.Response:
         for _ in range(6):
             if not _same_origin(url):
                 raise TransportError("Request destination is not the trusted origin")
+            if authenticated_request and "login" in parse_qs(urlsplit(url).query).get("link", []):
+                raise SessionExpiredError("USDB requires login again")
             try:
                 response = self._client.request(method, url, data=fields)
             except httpx.HTTPError:
