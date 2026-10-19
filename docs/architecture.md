@@ -38,7 +38,7 @@ Never log passwords, cookies, authorization headers, or raw authenticated pages.
 ## Unresolved research
 
 The spike verified form POST and session cookies over HTTPS; the production client
-still needs live acceptance. Combined search behavior, TXT wait-page behavior,
+passed real-site login and subsequent-request acceptance on 2026-10-19. Combined search behavior, TXT wait-page behavior,
 and normalization aggressiveness still need empirical validation. The research
 and roadmap documents mentioned on Trello were not provided; the snapshot only
 captures card descriptions. Implement no assumptions as settled protocol facts.
