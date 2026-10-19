@@ -8,6 +8,8 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 
 import httpx
 
+from usdb_scrapper.credential_manager import CredentialProvider
+
 ORIGIN = "https://usdb.animux.de"
 LOGIN_URL = ORIGIN + "/?link=login"
 LIST_URL = ORIGIN + "/?link=list"
@@ -101,13 +103,18 @@ def _same_origin(url: str) -> bool:
 
 
 class UsdbSession:
-    """One in-memory session. Single-worker ownership; no automatic retries.
+    """One in-memory session. Single-worker ownership; one optional retry after session expiry.
 
     Close explicitly or use a context manager. Closing clears local cookies,
     not the session on the remote server. Never log returned HTML or credentials.
     """
 
-    def __init__(self, *, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        credential_provider: CredentialProvider | None = None,
+    ) -> None:
         self._client = httpx.Client(
             transport=transport,
             timeout=httpx.Timeout(20, connect=10),
@@ -115,6 +122,7 @@ class UsdbSession:
             headers={"User-Agent": "USDB-Scrapper/0.1"},
         )
         self._authenticated = False
+        self._credential_provider = credential_provider
 
     @property
     def authenticated(self) -> bool:
@@ -199,11 +207,29 @@ class UsdbSession:
 
     def get_html(self, path: str = "/?link=list") -> str:
         """Read a same-origin page using this authenticated session."""
-        return self._authenticated_html("GET", path)
+        return self._with_reauthentication("GET", path)
 
     def post_html(self, path: str, fields: Mapping[str, str]) -> str:
         """Submit same-origin form data using this session (e.g. a search)."""
-        return self._authenticated_html("POST", path, dict(fields))
+        return self._with_reauthentication("POST", path, dict(fields))
+
+    def _with_reauthentication(
+        self, method: str, path: str, fields: dict[str, str] | None = None
+    ) -> str:
+        try:
+            return self._authenticated_html(method, path, fields)
+        except SessionExpiredError:
+            if self._credential_provider is None:
+                raise
+            credentials = self._credential_provider.get_credentials()
+            if credentials is None:
+                raise
+            try:
+                self.login(credentials.username, credentials.password)
+            finally:
+                del credentials
+        # Deliberately outside the handler: a second expiry is not retried.
+        return self._authenticated_html(method, path, fields)
 
     def _authenticated_html(
         self, method: str, path: str, fields: dict[str, str] | None = None

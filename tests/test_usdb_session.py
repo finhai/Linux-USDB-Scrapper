@@ -324,3 +324,86 @@ def test_deliberately_invalid_cookie_is_detected(setup):
         session.get_html()
     assert "PHPSESSID=invalid" in server.requests[-1].headers["cookie"]
     assert not session.authenticated
+
+
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_expiry_reauthenticates_and_retries_original_operation_once(method):
+    from usdb_scrapper.credential_manager import Credentials
+
+    server = Server()
+    expired_once = False
+    operations = []
+
+    class Provider:
+        calls = 0
+
+        def get_credentials(self):
+            self.calls += 1
+            return Credentials("demo", "synthetic-secret")
+
+    def handler(request):
+        nonlocal expired_once
+        if request.url.params.get("link") == "search":
+            operations.append((request.method, request.content))
+            if not expired_once:
+                expired_once = True
+                return httpx.Response(200, text=FORM)
+        return server(request)
+
+    provider = Provider()
+    with UsdbSession(
+        transport=httpx.MockTransport(handler), credential_provider=provider
+    ) as session:
+        login(session)
+        result = (
+            session.get_html("/?link=search")
+            if method == "GET"
+            else session.post_html("/?link=search", {"title": "Don't Stop"})
+        )
+        assert result == PROTECTED
+        assert session.authenticated
+        assert provider.calls == 1
+        assert len(operations) == 2
+        assert operations[0] == operations[1]
+
+
+@pytest.mark.parametrize("mode", ["missing", "bad_login", "second_expiry", "network", "initial"])
+def test_reauthentication_is_bounded_and_only_for_expiry(mode):
+    from usdb_scrapper.credential_manager import Credentials
+
+    server = Server()
+    operations = []
+
+    class Provider:
+        calls = 0
+
+        def get_credentials(self):
+            self.calls += 1
+            if mode == "missing":
+                return None
+            if mode == "bad_login":
+                server.fail_login = True
+            return Credentials("demo", "synthetic-secret")
+
+    def handler(request):
+        if request.url.params.get("link") == "search":
+            operations.append(request)
+            return httpx.Response(500 if mode == "network" else 401)
+        return server(request)
+
+    provider = Provider()
+    with UsdbSession(
+        transport=httpx.MockTransport(handler), credential_provider=provider
+    ) as session:
+        if mode != "initial":
+            login(session)
+        with pytest.raises(TransportError if mode == "network" else AuthenticationError):
+            session.get_html("/?link=search")
+        assert provider.calls == (0 if mode in ("initial", "network") else 1)
+        assert len(operations) == (0 if mode == "initial" else 2 if mode == "second_expiry" else 1)
+
+
+def test_credentials_repr_hides_secrets():
+    from usdb_scrapper.credential_manager import Credentials
+
+    assert repr(Credentials("private-user", "private-password")) == "Credentials()"

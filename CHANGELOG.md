@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Allow one automatic reauthentication and retry using an injected credential provider.
+
 - Detect expired sessions with a dedicated error, clear stale cookies, and stop login redirects.
 
 - Add an in-memory USDB session client with verified login and authenticated HTML requests.
