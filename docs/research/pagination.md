@@ -1,25 +1,49 @@
-# Pagination and result-row discovery — card 19
+# Pagination and result rows — card 19
 
-The search protocol exposes start and limit controls. Their offset semantics,
-100-result page size and result-row structure still need authenticated evidence.
-The production search API currently returns only first-page HTML.
+## Live protocol evidence (2026-10-19)
 
-Run scripts/probe_usdb_pagination.py locally with hidden credential prompts. It
-searches for Love in ascending ID order with these proposed page parameters:
-start=0/limit=100, start=100/limit=100, and start=90/limit=30. These are hypotheses
-to test, not settled protocol facts. The boundary page should equal the last ten
-IDs of the first page plus the first twenty IDs of the second page.
+The maintainer ran the discovery probe with title=Love and ascending ID sort.
+start=0/limit=100 returned 100 candidate rows, start=100/limit=100 returned another
+100, and start=90/limit=30 exactly matched the last ten of the first page followed
+by the first twenty of the second. Both full pages had unique, disjoint IDs.
+This verifies offsets and page sizes at that boundary on the observed site.
 
-The JSON reports candidate leaf-table-row IDs, duplicate indicators, two sample
-song rows per page, sort-header cell positions, and numeric pagination controls.
-Nested layout rows are excluded. Inputs, scripts, raw HTML, cookies and image URLs
-are not emitted; only sample candidate row text and visible image labels appear.
-These are discovery candidates, not production SongEntry records. A changed layout
-may produce empty candidates; do not interpret that as an empty search result.
+Sample result rows have 13 cells: selection, image, artist, title/detail link,
+genre, year, edition, golden notes (Yes/No), language, creator, rating images,
+views, and an image/action cell. No raw authenticated pages or credentials saved.
 
-Acceptance remains pending: validate the live rows and offsets, implement strict
-record parsing and bounded page traversal, then prove a >100-match result has no
-boundary duplication or omissions. Do not mark the card Done based on this probe.
+## Implementation
 
-This branch depends on PR #11. Tests currently use synthetic HTML; no live
-pagination success is claimed until the maintainer supplies the JSON output.
+parse_listing validates the observed detailed-listing controls and 13-cell rows,
+requires one positive song ID in the title column, and produces immutable SongEntry
+records. Blank optional text becomes None. Year/views must be numeric; golden notes
+must be Yes/No/blank. HTML entities are decoded and display whitespace collapsed.
+Image-only rating and unavailable dates/YouTube links remain None. They are not
+inferred from image counts. A future layout or unexpected metadata raises
+ListingParseError rather than dropping records. A recognized listing with no detail
+links is empty; unrecognized responses or unaccounted detail links are rejected.
+
+PagedSearchClient.search preserves explicit query fields and server sort order,
+requests limit=100 with offsets 0,100,..., and pauses one second between requests.
+A short page terminates traversal; an exact multiple needs an extra empty page.
+It collects all records before returning, detects duplicate rows/page overlap,
+and raises if max_pages is exhausted rather than presenting truncated success.
+Default bound is 100 pages. HTTP/authentication errors propagate. Call in a worker.
+
+The server offers no snapshot guarantee: concurrent catalogue changes or unstable
+sort ties may still cause omissions. Overlap is detected, but a complete snapshot
+cannot be guaranteed by offset pagination alone. ID sorting is the verified default.
+
+## Validation
+
+200 offline tests pass on this branch, including >100 records, exact page multiples,
+malformed rows, overlaps, page bounds and later-page failures. The live discovery
+boundary passed; the production parser/paginator still needs its own acceptance:
+
+```sh
+cd /home/faule/MySoftware/Linux-USDB-Scrapper && .venv/bin/python scripts/check_usdb_pagination.py
+```
+
+This performs the full Love search with a 50-page bound and outputs only summary
+counts and boundary IDs. Card 19 remains open until acceptance, CI and merge.
+This branch depends on PR #11; reconcile/retarget to dev after prerequisite merge.
