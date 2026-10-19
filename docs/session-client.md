@@ -61,3 +61,22 @@ not claim a new live-site expiry experiment. Automatic reauthentication is card 
 
 This feature branch depends on the session-client PR #8. Merge that PR first;
 retarget this feature PR to dev afterward.
+
+## Optional reauthentication — card 17
+
+Pass credential_provider implementing CredentialProvider.get_credentials() to
+UsdbSession to enable one retry after SessionExpiredError. The provider returns
+Credentials or None without prompting. No provider means the existing explicit
+login behavior. Initial unauthenticated access, network/server errors, unavailable
+credentials, failed re-login, and a second expiry do not trigger further retries.
+GET/POST paths and form data are preserved. Use replay only for read operations
+such as search; this API is not a general retry facility for remote mutations.
+
+The credential contract is implemented; an OS keyring-backed manager and GUI
+wiring are not. Credentials are fetched on demand, not copied onto the session,
+and excluded from their dataclass representation. Provider errors propagate to
+the caller; a failed refresh leaves the session unauthenticated.
+
+Offline tests verify transparent recovery and the retry bound. No new live-site
+reauthentication experiment is claimed. This branch depends on PR #9 and should
+be reconciled with dev after its prerequisite merges, before CI and merge.
