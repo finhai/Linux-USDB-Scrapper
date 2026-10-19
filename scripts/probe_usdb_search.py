@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 from usdb_scrapper.usdb_client import UsdbError, UsdbSession
 
 ORIGIN = "https://usdb.animux.de/"
-SORT_KEY = re.compile(r"sort|order|direction", re.I)
+SORT_KEY = re.compile(r"sort|order|direction|^ud$", re.I)
 SAFE_TOKEN = re.compile(r"[A-Za-z0-9_. -]{0,60}\Z")
 
 
@@ -26,6 +26,8 @@ class SearchSummary(HTMLParser):
         self.fields = set()
         self.sort_options = {}
         self.select = None
+        self.echoed_filters = {}
+        self.direction_controls = []
         self.feed(html)
 
     def handle_starttag(self, tag, attrs):
@@ -34,6 +36,18 @@ class SearchSummary(HTMLParser):
         if tag in ("input", "select") and SAFE_TOKEN.fullmatch(name):
             # Field names only: never values of hidden/account controls.
             self.fields.add(name)
+        if tag == "input" and name in ("interpret", "title"):
+            self.echoed_filters[name] = (values.get("value") or "")[:120]
+        if tag == "input" and name == "ud":
+            value = values.get("value") or ""
+            if SAFE_TOKEN.fullmatch(value):
+                self.direction_controls.append(
+                    {
+                        "value": value,
+                        "type": values.get("type") or "text",
+                        "checked": "checked" in values,
+                    }
+                )
         if tag == "select":
             self.select = name if SORT_KEY.search(name) else None
         if tag == "option" and self.select:
@@ -77,9 +91,27 @@ class SearchSummary(HTMLParser):
             "candidate_song_count_on_page": len(self.ids),
             "candidate_link_types": sorted(self.id_links),
             "field_names": sorted(self.fields),
+            "echoed_search_filters": self.echoed_filters,
+            "direction_controls": self.direction_controls,
             "sort_link_parameters": self.sort_links,
             "sort_option_values": self.sort_options,
         }
+
+
+def search_fields(fields):
+    # Omitted fields may inherit the previous search from the server session.
+    return {"details": "1", "interpret": "", "title": "", "start": "0", **fields}
+
+
+def compact(summary):
+    return {
+        key: summary[key]
+        for key in (
+            "candidate_song_ids_in_page_order",
+            "candidate_song_count_on_page",
+            "echoed_search_filters",
+        )
+    }
 
 
 def main():
@@ -111,11 +143,31 @@ def main():
         with UsdbSession() as session:
             session.login(username, password)
             username = password = ""
-            report["listing_controls"] = SearchSummary(session.get_html()).summary()
+            controls = SearchSummary(session.get_html()).summary()
+            report["listing_controls"] = controls
+            directions = list(
+                dict.fromkeys(
+                    controls["sort_option_values"].get("ud", [])
+                    + [item["value"] for item in controls["direction_controls"]]
+                )
+            )
+            cases += [
+                ("id_sort_" + str(index), {"title": "Dancing Queen", "order": "id", "ud": value})
+                for index, value in enumerate(directions[:2])
+            ]
+            cases.append(("title_control_after_negative", {"title": "Dancing Queen"}))
             for label, fields in cases:
                 time.sleep(1)
-                html = session.post_html("/?link=list", {"details": "1", **fields})
-                report["queries"][label] = {"submitted": fields, **SearchSummary(html).summary()}
+                submitted = search_fields(fields)
+                html = session.post_html("/?link=list", submitted)
+                summary = SearchSummary(html).summary()
+                report["queries"][label] = {"submitted": submitted, **compact(summary)}
+                if label.startswith("id_sort_"):
+                    ids = summary["candidate_song_ids_in_page_order"]
+                    report["queries"][label].update(
+                        ids_ascending=bool(ids) and ids == sorted(ids),
+                        ids_descending=bool(ids) and ids == sorted(ids, reverse=True),
+                    )
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0
     except (UsdbError, ValueError):

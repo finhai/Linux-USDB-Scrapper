@@ -28,3 +28,24 @@ Status: probe and synthetic extraction tests prepared; authenticated evidence
 pending. Card 18 remains WorkingOn. This branch depends only on session-client
 PR #8, not the later expiry/retry branches. Its smaller test count reflects that
 branch base, not removal of tests. CI requires retargeting to dev after #8 merges.
+
+## First authenticated observation — 2026-10-19
+
+The maintainer reported 30 artist-only candidates, six title-only candidates,
+combined ABBA + Dancing Queen candidate 3289, and zero candidates for a deliberately
+unmatched artist. This supports combined filtering for that example; it does not
+prove the parser scopes only result rows or prove complete pagination.
+
+Observed order values: id, interpret, title, genre, year, edition, golden,
+language, autor, rating, views, lastchange. A separate ud control is present,
+but its values were omitted by the first probe's discovery filter.
+
+All four normalization searches yielded zero candidates. These ran after the
+unmatched artist search and omitted interpret, so retained server-side filters
+are a possible confounder. They do NOT establish normalization equivalence.
+
+The corrected probe sends both artist and title explicitly (empty when unused),
+resets start to zero, reports echoed filter values, captures ud controls and tests
+up to two discovered direction values using order=id. It includes a title-only
+positive control after the negative case. It reports numeric candidate order;
+result-row scoping remains a limitation. No guessed direction values are sent.
