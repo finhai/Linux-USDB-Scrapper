@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add combined artist/title search HTML retrieval and deterministic sort-toggle state.
+
 - Add an in-memory USDB session client with verified login and authenticated HTML requests.
 
 - Add an UltraStar TXT model with optional genre and opaque note-block preservation.
