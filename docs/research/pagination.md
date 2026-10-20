@@ -38,7 +38,11 @@ cannot be guaranteed by offset pagination alone. ID sorting is the verified defa
 
 200 offline tests pass on this branch, including >100 records, exact page multiples,
 malformed rows, overlaps, page bounds and later-page failures. The live discovery
-boundary passed; the production parser/paginator still needs its own acceptance:
+boundary passed. The maintainer also ran the production parser/paginator on
+2026-10-19: it completed with 1,024 records, unique IDs in ascending order, and
+artist/title present on every record. First IDs: 9, 37, 50, 88, 148. Last IDs:
+32313, 32388, 32417, 32480, 32485. This validates the tested search across 11 pages.
+No credentials, cookies or raw pages were retained. To repeat the check:
 
 ```sh
 cd /home/faule/MySoftware/Linux-USDB-Scrapper && .venv/bin/python scripts/check_usdb_pagination.py
