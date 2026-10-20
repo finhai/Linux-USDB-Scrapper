@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Connect paginated search, detail enrichment, Song ID deduplication and final YouTube filtering.
+
 - Fetch song details and extract distinct YouTube references from verified comment sections.
 
 - Parse detailed listing rows into SongEntry records and retrieve bounded 100-result pages.

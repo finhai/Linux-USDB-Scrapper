@@ -12,6 +12,13 @@ from usdb_scrapper.usdb_client.listing import (
     PaginationError,
     parse_listing,
 )
+from usdb_scrapper.usdb_client.pipeline import (
+    PipelineError,
+    SearchPipeline,
+    SearchStages,
+    filter_video_results,
+)
+from usdb_scrapper.usdb_client.results import merge_song_results
 from usdb_scrapper.usdb_client.search import (
     SearchClient,
     SearchQuery,
@@ -28,6 +35,11 @@ from usdb_scrapper.usdb_client.session import (
 )
 
 __all__ = [
+    "PipelineError",
+    "SearchPipeline",
+    "SearchStages",
+    "filter_video_results",
+    "merge_song_results",
     "DetailClient",
     "DetailParseError",
     "SongDetails",
