@@ -3,9 +3,9 @@
 A Python + PySide6 desktop application for Linux and Windows, planned in
 [Trello](https://trello.com/b/KnffFXKA/usdb-scrapper-linux).
 
-Current status: desktop shell, SongEntry and UltraStar TXT models, and an in-memory
-USDB session client. Login is available through the Python API; the desktop UI
-still has no login, search, downloads, or library management.
+Current branch: desktop shell, domain models, session client, paginated search,
+YouTube detail extraction, and a staged search pipeline. Backend APIs are available
+in Python; the desktop UI still has no login, search, downloads, or library management.
 
 ## Start developing
 
