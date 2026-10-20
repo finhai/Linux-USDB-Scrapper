@@ -1,5 +1,11 @@
 """Public USDB session API."""
 
+from usdb_scrapper.usdb_client.listing import (
+    ListingParseError,
+    PagedSearchClient,
+    PaginationError,
+    parse_listing,
+)
 from usdb_scrapper.usdb_client.search import (
     SearchClient,
     SearchQuery,
@@ -16,6 +22,10 @@ from usdb_scrapper.usdb_client.session import (
 )
 
 __all__ = [
+    "ListingParseError",
+    "PagedSearchClient",
+    "PaginationError",
+    "parse_listing",
     "SearchClient",
     "SearchQuery",
     "SortDirection",

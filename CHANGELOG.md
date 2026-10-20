@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Parse detailed listing rows into SongEntry records and retrieve bounded 100-result pages.
+
 - Add combined artist/title search HTML retrieval and deterministic sort-toggle state.
 
 - Add an in-memory USDB session client with verified login and authenticated HTML requests.
