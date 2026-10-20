@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fetch song details and extract distinct YouTube references from verified comment sections.
+
 - Parse detailed listing rows into SongEntry records and retrieve bounded 100-result pages.
 
 - Add combined artist/title search HTML retrieval and deterministic sort-toggle state.
