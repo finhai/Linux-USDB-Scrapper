@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Combine search results by Song ID while preserving first-occurrence order and metadata.
+
 - Add an UltraStar TXT model with optional genre and opaque note-block preservation.
 
 - Initial package structure, launchable desktop shell, locked environment, and quality checks.
