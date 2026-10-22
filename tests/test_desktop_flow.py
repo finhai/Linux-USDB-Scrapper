@@ -28,7 +28,7 @@ class Gateway:
     def __init__(self, credentials, provider): pass
     def verify(self): pass
     def search_page(self, query, offset, cancel):
-        assert query.artist == 'Artist'
+        assert query.artist == 'artist'
         return (SongEntry(song_id=1, artist='Artist', title='Song',
                           youtube_url='https://www.youtube.com/watch?v=abcdefghijk'),), False
     def txt(self, song_id, cancel):
@@ -72,7 +72,7 @@ def poll():
             directory = Path(window._jobs[0].bundle.txt).parent
             assert len(list(directory.iterdir())) == 4
             text = (directory / 'song.txt').read_text()
-            assert '#VERSION:2.0.0' in text and '#AUDIO:song.mp3' in text
+            assert '#VERSION:1.0.0' in text and '#AUDIO:song.mp3' in text
             assert 'youtube' not in text
             window.concurrency.setValue(3)
             window._save_settings()

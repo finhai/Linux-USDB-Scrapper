@@ -70,7 +70,8 @@ def test_completion_means_all_four_files_exist(tmp_path):
         "song.mp4",
         "cover.jpg",
     )
-    assert song.song.version == "2.0.0"
+    assert song.song.version == "1.0.0"
+    assert song.song.bpm == 120
     assert not list(tmp_path.glob(".usdb-partial-*"))
 
 

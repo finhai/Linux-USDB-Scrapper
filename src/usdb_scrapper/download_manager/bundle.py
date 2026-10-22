@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from usdb_scrapper.domain.download_item import DownloadItem, DownloadState
-from usdb_scrapper.parser import LocalMedia, ParsedTxt, serialize_v2_txt
+from usdb_scrapper.parser import LocalMedia, ParsedTxt, serialize_v1_txt
 from usdb_scrapper.storage_manager.bundle import BundleStage
 
 
@@ -45,7 +45,7 @@ class BundleWorker:
             parsed = await self._source.fetch_txt(item.song.song_id)
             paths = stage.paths
             # Validate export before spending time downloading media.
-            data = serialize_v2_txt(
+            data = serialize_v1_txt(
                 parsed,
                 LocalMedia(
                     audio=paths["audio"].name,

@@ -45,9 +45,10 @@ No browser cookies or USDB credentials are supplied to YouTube.
 
 ## Compatibility and acceptance
 
-TXT output uses the explicitly selected **unpublished UltraStar v2 draft** with
-AUDIO and timing conversion. Player compatibility must be checked before adopting
-these files as a production library. Video selection targets H.264 MP4 up to 1080p
+New downloads use **VERSION 1.0.0 with AUDIO only**, preserving source BPM, timing
+and notes. UltraStar Deluxe 2026.10.0 supports this header combination and rejects
+VERSION 2.0.0. Previously generated draft-v2 bundles must be downloaded again;
+changing their VERSION alone would corrupt timing. Actual playback remains to be checked. Video selection targets H.264 MP4 up to 1080p
 and AAC audio rather than assuming every MP4 codec is supported by players.
 
 Current evidence: offline Qt workflow and process-crash recovery pass. A live
@@ -58,4 +59,6 @@ and actual UltraStar playback still require verification. Do not label this a
 finished cross-platform release until those checks pass.
 
 See [desktop behavior](desktop.md), [transaction limitations](library-recovery.md),
-and [draft-v2 export](v2-export.md) for implementation details.
+and [player export](player-export.md) for implementation details.
+
+Latest evidence is recorded in [validation](validation-2026-10-22.md).

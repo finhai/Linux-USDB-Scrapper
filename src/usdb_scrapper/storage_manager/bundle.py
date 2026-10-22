@@ -30,8 +30,17 @@ def identical(first: Path, second: Path) -> bool:
     return True
 
 
+def _write_record(journal: Path, data: dict[str, object]) -> None:
+    temporary = journal.with_suffix(".tmp")
+    with temporary.open("w", encoding="utf-8") as stream:
+        json.dump(data, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, journal)
+
+
 def _recover(journal: Path) -> None:
-    """Caller holds the target lock. Restore old directory if publication stopped."""
+    """Restore interrupted file replacements; never remove the final directory."""
     try:
         data = json.loads(journal.read_text(encoding="utf-8"))
         name, token = data["destination"], data["token"]
@@ -49,13 +58,42 @@ def _recover(journal: Path) -> None:
         backup = journal.parent / f".usdb-backup-{token}"
         if any(path.is_symlink() for path in (journal, destination, staging, backup)):
             raise ValueError()
+        state = data.get("state")
+        if state == "replacing":
+            names = data["files"]
+            if (
+                not isinstance(names, list)
+                or len(names) != 4
+                or len(set(names)) != 4
+                or any(
+                    not isinstance(n, str) or Path(n).name != n or n in ("", ".", "..")
+                    for n in names
+                )
+            ):
+                raise ValueError()
+            staging.mkdir(exist_ok=True)
+            # Backups remain intact until every old file has been restored, so a
+            # second crash during recovery is safe to retry.
+            for filename in names:
+                original = backup / filename
+                if original.is_symlink() or not original.is_file():
+                    raise ValueError()
+                temporary = staging / (filename + ".restore")
+                temporary.unlink(missing_ok=True)
+                shutil.copy2(original, temporary)
+                os.replace(temporary, destination / filename)
+            data["state"] = "aborted"
+            _write_record(journal, data)
+        elif state is None and backup.exists() and not destination.exists():
+            # Recover journals written by the earlier directory-rename prototype.
+            backup.rename(destination)
+        elif state not in (None, "preparing", "committed", "aborted"):
+            raise ValueError()
         if backup.exists():
-            if not destination.exists():
-                backup.rename(destination)
-            else:
-                shutil.rmtree(backup)
+            shutil.rmtree(backup)
         if staging.exists():
             shutil.rmtree(staging)
+        journal.with_suffix(".tmp").unlink(missing_ok=True)
         journal.unlink()
     except (OSError, ValueError, KeyError, TypeError):
         raise BundleStorageError("Library transaction needs manual inspection") from None
@@ -78,10 +116,9 @@ def recover_directory(parent: Path) -> int:
 class BundleStage:
     """Single-song transaction with an OS lock released automatically after a crash.
 
-    Replacement uses old->backup then staged->final directory renames. There is
-    a brief absent-path interval, never a directory of partially downloaded files.
-    Journals restore an interrupted replacement on restart. This is process-crash
-    recovery, not a filesystem/power-loss durability guarantee.
+    Existing files are atomically replaced only after a complete download and
+    backup. The final paths stay present. Interrupted groups roll back on restart.
+    This is process-crash recovery, not a power-loss durability guarantee.
     """
 
     def __init__(self, bundle: DownloadBundle):
@@ -106,7 +143,15 @@ class BundleStage:
             self.directory = self.destination.parent / f".usdb-partial-{token}"
             self._backup = self.destination.parent / f".usdb-backup-{token}"
             with self._journal.open("x", encoding="utf-8") as stream:
-                json.dump({"destination": self.destination.name, "token": token}, stream)
+                json.dump(
+                    {
+                        "destination": self.destination.name,
+                        "token": token,
+                        "state": "preparing",
+                        "files": [p.name for p in paths],
+                    },
+                    stream,
+                )
                 stream.flush()
                 os.fsync(stream.fileno())
             self.directory.mkdir()
@@ -141,13 +186,24 @@ class BundleStage:
                 self.discard()
                 self._published = True
                 return
-            self.destination.rename(self._backup)
-        try:
+            self._backup.mkdir()
+            for existing_path in self.destination.iterdir():
+                try:
+                    os.link(existing_path, self._backup / existing_path.name)
+                except OSError:
+                    shutil.copy2(existing_path, self._backup / existing_path.name)
+            data = json.loads(self._journal.read_text(encoding="utf-8"))
+            data["state"] = "replacing"
+            _write_record(self._journal, data)
+            # Every replace is atomic: readers always see a whole old or new file.
+            # TXT goes last; an interrupted group is rolled back during recovery.
+            for kind in ("audio", "video", "cover", "txt"):
+                path = self.paths[kind]
+                os.replace(path, self.destination / path.name)
+            data["state"] = "committed"
+            _write_record(self._journal, data)
+        else:
             self.directory.rename(self.destination)
-        except OSError:
-            if self._backup.exists() and not self.destination.exists():
-                self._backup.rename(self.destination)
-            raise BundleStorageError("Cannot publish completed bundle") from None
         self._published = True
         self.discard()
 

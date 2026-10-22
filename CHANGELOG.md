@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Export new downloads as player-compatible VERSION 1.0.0 with AUDIO only and unchanged timing.
+
 - Connect deferred login, paginated search, download controls and settings to the desktop.
 - Integrate native credential recovery, portable library paths and atomic preference saves.
 - Recover interrupted library transactions and skip identical completed bundles.

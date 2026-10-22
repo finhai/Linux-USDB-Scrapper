@@ -41,7 +41,14 @@ def main() -> int:
         from PySide6.QtCore import QTimer
 
         QTimer.singleShot(500, window.close)
-    return app.exec()
+    result = app.exec()
+    # Destroy Qt objects while Python callbacks and wrappers are still alive.
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    window.controller.deleteLater()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    return result
 
 
 if __name__ == "__main__":

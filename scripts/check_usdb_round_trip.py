@@ -10,6 +10,7 @@ from usdb_scrapper.parser import (
     TxtParseError,
     parse_txt,
     serialize_local_txt,
+    serialize_v1_txt,
     serialize_v2_txt,
 )
 from usdb_scrapper.usdb_client import TxtClient, UsdbError, UsdbSession
@@ -37,6 +38,15 @@ def report_round_trip(text):
         "local_media_correct": (reparsed.song.audio, reparsed.song.video, reparsed.song.cover)
         == (media.audio, media.video, media.cover),
     }
+    player_data = serialize_v1_txt(original, media)
+    player = parse_txt(player_data.decode("utf-8"))
+    report.update(
+        player_version_correct=player.song.version == "1.0.0",
+        player_bpm_identical=player.song.bpm == original.song.bpm,
+        player_notes_identical=player.song.note_block == original.song.note_block,
+        player_audio_only=b"#AUDIO:" in player_data and b"#MP3:" not in player_data,
+        player_second_export_identical=serialize_v1_txt(player, media) == player_data,
+    )
     try:
         data = serialize_v2_txt(original, media)
         v2 = parse_txt(data.decode("utf-8"))

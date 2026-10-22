@@ -16,6 +16,7 @@ from usdb_scrapper.domain.download_item import DownloadItem
 from usdb_scrapper.download_manager import BundleWorker, DownloadQueue
 from usdb_scrapper.download_manager.sources import DownloadSources
 from usdb_scrapper.download_manager.youtube import YtDlpDownloader
+from usdb_scrapper.normalization.search import normalize_search_input
 from usdb_scrapper.parser import ParsedTxt
 from usdb_scrapper.storage_manager.library import Library
 from usdb_scrapper.storage_manager.settings import Settings, SettingsError, SettingsStore
@@ -126,7 +127,9 @@ class ApplicationController(QObject):
             return
         try:
             self._query = SearchQuery(
-                artist.strip(), title.strip(), SortState(SortField(field), SortDirection(direction))
+                normalize_search_input(artist),
+                normalize_search_input(title),
+                SortState(SortField(field), SortDirection(direction)),
             )
         except (ValueError, TypeError):
             self.message.emit("Enter an artist or title and select a valid sort order.")

@@ -347,5 +347,8 @@ class MainWindow(QMainWindow):
             self.controller.shutdown()
 
     def _on_stopped(self) -> None:
+        if self.controller.runtime.thread.is_alive():
+            QTimer.singleShot(50, self._on_stopped)
+            return
         self._stopped = True
         self.close()

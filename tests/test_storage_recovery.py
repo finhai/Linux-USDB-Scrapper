@@ -46,25 +46,39 @@ def test_identical_skips_and_changed_bundle_replaces(tmp_path):
     assert not list(tmp_path.glob(".usdb-backup-*"))
 
 
-@pytest.mark.parametrize("phase", ["staging", "backup", "published"])
+@pytest.mark.parametrize("phase", ["staging", "replacing", "published"])
 def test_kill_and_restart_recovers_complete_directory(tmp_path, phase):
     root = tmp_path / "song"
     first = BundleStage(bundle(root))
     fill(first, b"original")
     first.publish()
     script = """
-import sys, time
+import sys, time, os
 from pathlib import Path
+import usdb_scrapper.storage_manager.bundle as module
 from usdb_scrapper.domain.download_item import DownloadBundle
 from usdb_scrapper.storage_manager.bundle import BundleStage
 root = Path(sys.argv[1])
 s = BundleStage(DownloadBundle(txt=root/'song.txt', audio=root/'song.mp3',
                                video=root/'song.mp4', cover=root/'song.jpg'))
 for path in s.paths.values(): path.write_bytes(b'changed')
-if sys.argv[2] in ('backup', 'published'): s.destination.rename(s._backup)
-if sys.argv[2] == 'published': s.directory.rename(s.destination)
-print('ready', flush=True)
-time.sleep(60)
+def pause():
+    print('ready', flush=True)
+    time.sleep(60)
+if sys.argv[2] == 'staging': pause()
+if sys.argv[2] == 'replacing':
+    original = os.replace
+    def replacement(source, destination):
+        original(source, destination)
+        if Path(destination) == root/'song.mp3': pause()
+    os.replace = replacement
+if sys.argv[2] == 'published':
+    original_recover = module._recover
+    def recover(journal):
+        pause()
+        original_recover(journal)
+    module._recover = recover
+s.publish()
 """
     process = subprocess.Popen(
         [sys.executable, "-c", script, str(root), phase], stdout=subprocess.PIPE
