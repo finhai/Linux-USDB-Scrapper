@@ -28,6 +28,16 @@ def main() -> int:
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--smoke-test", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    import logging
+
+    # Configure only our namespace; HTTP libraries must not log request metadata.
+    app_logger = logging.getLogger("usdb_scrapper")
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        app_logger.addHandler(handler)
+    app_logger.setLevel(logging.INFO)
+    app_logger.propagate = False
     from PySide6.QtWidgets import QApplication
 
     from usdb_scrapper.frontend.window import MainWindow

@@ -1,6 +1,7 @@
 """Dedicated asyncio thread; Qt UI communicates using queued signals."""
 
 import asyncio
+import logging
 import threading
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
@@ -23,7 +24,8 @@ async def blocking[T](call: Callable[[threading.Event], T]) -> T:
 
 
 class Runtime:
-    def __init__(self) -> None:
+    def __init__(self, on_error: Callable[[], None] | None = None) -> None:
+        self._on_error = on_error
         self.loop = asyncio.new_event_loop()
         self._tasks: set[asyncio.Task[None]] = set()
         self.thread = threading.Thread(target=self._run, name="usdb-worker", daemon=True)
@@ -43,6 +45,12 @@ class Runtime:
             self._tasks.add(task)
             try:
                 await operation
+            except Exception:
+                # Exception strings/tracebacks can contain HTTP requests or secrets.
+                logging.getLogger(__name__).error("Background operation failed")
+                if self._on_error is not None:
+                    self._on_error()
+                raise
             finally:
                 self._tasks.discard(task)
 

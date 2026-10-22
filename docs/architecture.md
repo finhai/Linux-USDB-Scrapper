@@ -25,14 +25,16 @@ and deliver state changes to the GUI thread via Qt signals.
 ## Errors and logging
 
 Use standard-library logging with module loggers (`logging.getLogger(__name__)`).
-Libraries do not configure handlers; the application entry point will configure
-them once logging is introduced. INFO covers lifecycle, WARNING recoverable
+Libraries do not configure handlers; the entry point configures a stderr handler
+for the usdb_scrapper namespace only. HTTP-library diagnostics are not enabled. INFO covers lifecycle, WARNING recoverable
 failures, ERROR failed operations; DEBUG is opt-in diagnostics.
 
 Raise typed exceptions at service boundaries (authentication, transport, parse,
 storage); preserve causes with `raise ... from exc`. Controllers catch expected
-failures and produce user-facing states. Unexpected failures are logged once at
-the orchestration boundary and shown as a generic failure with a retry path.
+failures and produce user-facing states. Unexpected submitted background failures are logged at the runtime boundary
+and reported through the controller as a generic failure with a retry path.
+Download failures become failed queue items. Diagnostics use fixed text without
+exception messages or tracebacks, which could contain credentials or request data.
 Do not swallow exceptions or represent failure as empty success results.
 Never log passwords, cookies, authorization headers, or raw authenticated pages.
 

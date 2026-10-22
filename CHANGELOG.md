@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report unexpected background failures in the UI with sanitized application diagnostics.
+
 - Export new downloads as player-compatible VERSION 1.0.0 with AUDIO only and unchanged timing.
 
 - Connect deferred login, paginated search, download controls and settings to the desktop.

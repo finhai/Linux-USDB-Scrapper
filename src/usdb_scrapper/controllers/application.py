@@ -45,7 +45,7 @@ class ApplicationController(QObject):
         except SettingsError as exc:
             self.settings = Settings()
             self.startup_message = str(exc)
-        self.runtime = Runtime()
+        self.runtime = Runtime(on_error=self._unexpected_error)
         self._credentials: Credentials | None = None
         self._queue: DownloadQueue | None = None
         self._stages: dict[int, str] = {}
@@ -60,6 +60,10 @@ class ApplicationController(QObject):
         self._poll_task: asyncio.Task[None] | None = None
         self.runtime.submit(self._initialize())
 
+    def _unexpected_error(self) -> None:
+        self.busy.emit(False)
+        self.message.emit("Operation failed. Retry it; restart the application if it persists.")
+
     async def _initialize(self) -> None:
         try:
             recovered = await blocking(
@@ -67,7 +71,8 @@ class ApplicationController(QObject):
             )
             if recovered:
                 self.message.emit(f"Recovered {recovered} interrupted library transactions.")
-        except ValueError:
+        except (ValueError, OSError):
+            logger.warning("Library recovery needs inspection")
             self.message.emit("A library transaction needs inspection before retrying its song.")
         self._queue = DownloadQueue(self._download, limit=self.settings.concurrency)
         self._poll_task = asyncio.create_task(self._poll())
@@ -247,6 +252,7 @@ class ApplicationController(QObject):
                 self._queue.set_limit(concurrency)
             self.message.emit("Settings saved. New downloads use the selected library location.")
         except (SettingsError, OSError):
+            logger.warning("Settings save failed")
             self.message.emit("Settings could not be saved. Check the values and location.")
 
     def forget_credentials(self) -> None:
@@ -258,6 +264,7 @@ class ApplicationController(QObject):
             self._credentials = None
             self.message.emit("Remembered credentials removed.")
         except CredentialStoreError:
+            logger.warning("Credential removal failed")
             self.message.emit("The native keyring could not remove the remembered credentials.")
 
     def shutdown(self) -> None:

@@ -1,6 +1,7 @@
 """Event-loop-owned FIFO scheduling with a dynamically adjustable active limit."""
 
 import asyncio
+import logging
 from collections import deque
 from collections.abc import Awaitable, Callable
 from functools import partial
@@ -122,6 +123,7 @@ class DownloadQueue:
         except asyncio.CancelledError:
             self._items[song_id] = self._items[song_id].transition(DownloadState.CANCELLED)
         except Exception:
+            logging.getLogger(__name__).warning("Download failed; retry is available")
             # Worker errors may carry URLs/credentials. Only publish a generic state.
             self._items[song_id] = self._items[song_id].transition(
                 DownloadState.FAILED, error="Download worker failed"
