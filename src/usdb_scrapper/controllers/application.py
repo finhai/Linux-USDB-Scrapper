@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+from collections import OrderedDict
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 class ApplicationController(QObject):
     results = Signal(object, bool)
+    cover_ready = Signal(int, bytes)
     downloads = Signal(object, object)
     message = Signal(str)
     busy = Signal(bool)
@@ -49,6 +52,7 @@ class ApplicationController(QObject):
         self._credentials: Credentials | None = None
         self._queue: DownloadQueue | None = None
         self._stages: dict[int, str] = {}
+        self._covers: OrderedDict[int, bytes] = OrderedDict()
         self._query: SearchQuery | None = None
         self._offset = 0
         self._more = False
@@ -74,7 +78,9 @@ class ApplicationController(QObject):
         except (ValueError, OSError):
             logger.warning("Library recovery needs inspection")
             self.message.emit("A library transaction needs inspection before retrying its song.")
-        self._queue = DownloadQueue(self._download, limit=self.settings.concurrency)
+        self._queue = DownloadQueue(
+            self._download, limit=self.settings.concurrency, autostart=False
+        )
         self._poll_task = asyncio.create_task(self._poll())
 
     async def _poll(self) -> None:
@@ -170,6 +176,7 @@ class ApplicationController(QObject):
             self._offset += 100
             self._more = more
             self.results.emit(entries, more)
+            self.runtime.submit(self._load_covers(entries))
             self.message.emit(f"Loaded {len(self._seen)} matching songs with YouTube links.")
         except AuthenticationError:
             self._credentials = None
@@ -184,6 +191,21 @@ class ApplicationController(QObject):
             self._searching = False
             self._search_task = None
             self.busy.emit(False)
+
+    async def _load_covers(self, songs: tuple[SongEntry, ...]) -> None:
+        for song in songs:
+            if self._closing:
+                return
+            data = self._covers.get(song.song_id)
+            if data is None:
+                try:
+                    data = await blocking(partial(Gateway.cover_bytes, song.song_id))
+                except Exception:
+                    continue  # A missing preview must not hide a selectable song.
+                self._covers[song.song_id] = data
+                while sum(map(len, self._covers.values())) > 32_000_000:
+                    self._covers.popitem(last=False)
+            self.cover_ready.emit(song.song_id, data)
 
     def enqueue(self, songs: list[SongEntry]) -> None:
         self.runtime.submit(self._enqueue(songs))
@@ -210,13 +232,24 @@ class ApplicationController(QObject):
             return await blocking(lambda cancel: gateway.txt(song_id, cancel))
 
         async def cover(song: ParsedTxt, target: Path) -> None:
-            await blocking(lambda cancel: gateway.cover(item.song.song_id, target, cancel))
+            cached = self._covers.get(item.song.song_id)
+            if cached is not None:
+                await blocking(lambda cancel: target.write_bytes(cached))
+            else:
+                await blocking(lambda cancel: gateway.cover(item.song.song_id, target, cancel))
 
         source = DownloadSources(txt, YtDlpDownloader(), cover)
         worker = BundleWorker(
             source, progress=lambda song_id, stage: self._stages.update({song_id: stage})
         )
         await worker(item)
+
+    def start_downloads(self) -> None:
+        self.runtime.submit(self._start_downloads())
+
+    async def _start_downloads(self) -> None:
+        if self._queue and not self._closing:
+            self._queue.start_pending()
 
     def cancel(self, song_id: int) -> None:
         self.runtime.submit(self._control(song_id, False))

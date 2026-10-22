@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add purple interface styling, USDB cover thumbnails, and explicit queue start.
+- Use readable Artist/Title directories and title-based media filenames.
+
 - Report unexpected background failures in the UI with sanitized application diagnostics.
 
 - Export new downloads as player-compatible VERSION 1.0.0 with AUDIO only and unchanged timing.

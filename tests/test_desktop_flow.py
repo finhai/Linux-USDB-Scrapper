@@ -27,6 +27,13 @@ class Provider:
 class Gateway:
     def __init__(self, credentials, provider): pass
     def verify(self): pass
+    @staticmethod
+    def cover_bytes(song_id, cancel):
+        from PIL import Image
+        from io import BytesIO
+        output = BytesIO()
+        Image.new('RGB', (32, 32), '#8452d4').save(output, format='JPEG')
+        return output.getvalue()
     def search_page(self, query, offset, cancel):
         assert query.artist == 'artist'
         return (SongEntry(song_id=1, artist='Artist', title='Song',
@@ -67,13 +74,19 @@ def poll():
             window.results_table.selectRow(0)
             window.download_button.click()
             phase = 2
-        elif phase == 2 and window._jobs and window._jobs[0].state.value in ('completed', 'failed'):
+        elif phase == 2 and window._jobs and window._cover_icons:
+            assert window._jobs[0].state.value == 'queued'
+            assert not Path(window._jobs[0].bundle.txt).exists()
+            window.start_button.click()
+            phase = 20
+        elif phase == 20 and window._jobs[0].state.value in ('completed', 'failed'):
             assert window._jobs[0].state.value == 'completed', window._jobs[0]
             directory = Path(window._jobs[0].bundle.txt).parent
             assert len(list(directory.iterdir())) == 4
-            text = (directory / 'song.txt').read_text()
-            assert '#VERSION:1.0.0' in text and '#AUDIO:song.mp3' in text
+            text = Path(window._jobs[0].bundle.txt).read_text()
+            assert '#VERSION:1.0.0' in text and '#AUDIO:Song.mp3' in text
             assert 'youtube' not in text
+            assert Path(window._jobs[0].bundle.cover).read_bytes() == Gateway.cover_bytes(1, None)
             window.concurrency.setValue(3)
             window._save_settings()
             phase = 3

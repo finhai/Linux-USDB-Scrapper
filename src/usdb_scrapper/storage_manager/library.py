@@ -4,7 +4,7 @@ from pathlib import Path
 
 from usdb_scrapper.domain import SongEntry
 from usdb_scrapper.domain.download_item import DownloadBundle
-from usdb_scrapper.normalization.filesystem import normalize_filesystem_name
+from usdb_scrapper.normalization.filesystem import readable_filesystem_name
 
 
 class Library:
@@ -12,17 +12,17 @@ class Library:
         self.root = root.expanduser().resolve()
 
     def bundle(self, song: SongEntry) -> DownloadBundle:
-        artist = normalize_filesystem_name(song.artist)
-        title = normalize_filesystem_name(song.title)
-        directory = self.root / artist / f"{title}id{song.song_id}"
+        artist = readable_filesystem_name(song.artist)
+        title = readable_filesystem_name(song.title)
+        directory = self.root / artist / f"{title} [USDB {song.song_id}]"
         # Never follow an existing artist/song symlink outside the selected root.
         if directory.resolve().is_relative_to(self.root) is False:
             raise ValueError("Library target escapes the configured root")
         return DownloadBundle(
-            txt=directory / "song.txt",
-            audio=directory / "song.mp3",
-            video=directory / "song.mp4",
-            cover=directory / "song.jpg",
+            txt=directory / f"{title}.txt",
+            audio=directory / f"{title}.mp3",
+            video=directory / f"{title}.mp4",
+            cover=directory / f"{title}.jpg",
         )
 
     def recover(self) -> int:

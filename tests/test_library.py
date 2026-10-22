@@ -16,7 +16,8 @@ def test_artist_layout_identity_and_root(tmp_path):
     assert first.txt.parent != second.txt.parent
     assert library.bundle(replace(song, artist="ACDC")).txt.parent.parent != first.txt.parent.parent
     assert song.artist == "AC/DC"
-    assert first.txt.parent.parent.name.isalnum()
+    assert first.txt.name == "Song One.txt"
+    assert first.txt.parent.name == "Song One [USDB 1]"
     assert Library(tmp_path / "new").bundle(song).txt.is_relative_to(tmp_path / "new")
 
 
@@ -31,3 +32,13 @@ def test_artist_symlink_escape_rejected(tmp_path):
         pytest.skip("Symlinks unavailable")
     with pytest.raises(ValueError, match="escapes"):
         library.bundle(song)
+
+
+def test_readable_title_files_for_user_example(tmp_path):
+    song = SongEntry(
+        song_id=32412, artist="Sexyy Red & Bruno Mars", title="Fat Juicy & Wet [EXPLICIT]"
+    )
+    paths = Library(tmp_path).bundle(song)
+    assert paths.txt.parent.parent.name == song.artist
+    for kind, extension in (("txt", "txt"), ("audio", "mp3"), ("video", "mp4"), ("cover", "jpg")):
+        assert getattr(paths, kind).name == song.title + "." + extension

@@ -11,7 +11,9 @@ loads the next page; Load more is available too. Changing the sort field resets
 to ascending; selecting the same field toggles. Searching/enrichment runs in
 background workers and may take over a minute for a full source page.
 
-Selected results enqueue four-file downloads. The Downloads tab displays actual
+Selected results are added to a waiting queue without starting transfers. Press
+Start queued downloads in the Downloads tab to start the current batch. Later
+additions wait for another press. Retry returns failed/cancelled items to the queue. The Downloads tab displays actual
 queue states and the current bundle stage, with cancellation/retry controls.
 No byte-percentage estimate is shown. Settings apply concurrency immediately;
 a new root applies to newly queued jobs. Settings persist atomically, without
@@ -25,3 +27,16 @@ Offline integration drives real Qt views and the controller through deferred
 login, search, enqueue, complete bundle, settings save and shutdown. External
 services and media are synthetic in that test. Live desktop end-to-end acceptance,
 media playback, and clean-machine platform checks remain pending.
+
+
+The interface uses a dark purple palette, violet actions, teal start controls and
+colored states. Search and Downloads show USDB cover thumbnails. The controller
+loads JPEGs in background and keeps a bounded 32 MB cache; downloads reuse cached
+image bytes when available and otherwise use the same USDB endpoint. Unavailable
+covers have a placeholder and do not block selecting the song.
+
+New library paths preserve readable artist/title spelling and Unicode. A song
+folder adds `[USDB <id>]` to distinguish versions; TXT/MP3/MP4/JPG use the title
+as their common filename stem, and TXT media headers match those filenames.
+Unsafe filesystem characters and overly long names are sanitized with a short
+collision suffix only when needed. Existing hashed folders are not migrated.

@@ -71,6 +71,10 @@ class Gateway:
             return parse_txt(client.retrieve_text(song_id))
 
     def cover(self, song_id: int, target: Path, cancel: threading.Event) -> None:
+        target.write_bytes(self.cover_bytes(song_id, cancel))
+
+    @staticmethod
+    def cover_bytes(song_id: int, cancel: threading.Event) -> bytes:
         # Cover URL is independent of comments and VIDEO meta-tag co/bg fields.
         data = bytearray()
         with httpx.stream(
@@ -81,7 +85,7 @@ class Gateway:
         ) as response:
             response.raise_for_status()
             for chunk in response.iter_bytes():
-                self.pause(cancel, 0)
+                Gateway.pause(cancel, 0)
                 data.extend(chunk)
                 if len(data) > 10_000_000:
                     raise ValueError("Cover exceeds the supported size")
@@ -89,6 +93,8 @@ class Gateway:
             with Image.open(BytesIO(data)) as image:
                 if image.width * image.height > 25_000_000:
                     raise ValueError("Cover dimensions exceed the supported size")
-                image.convert("RGB").save(target, format="JPEG")
+                output = BytesIO()
+                image.convert("RGB").save(output, format="JPEG")
+                return output.getvalue()
         except (UnidentifiedImageError, OSError):
             raise ValueError("USDB did not return a valid cover image") from None

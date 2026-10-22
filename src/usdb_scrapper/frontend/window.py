@@ -1,7 +1,7 @@
 """Desktop views; all backend operations pass through ApplicationController."""
 
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtGui import QCloseEvent, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from usdb_scrapper.controllers.application import ApplicationController
 from usdb_scrapper.domain import SongEntry
 from usdb_scrapper.domain.download_item import DownloadItem, DownloadState
+from usdb_scrapper.frontend.theme import PURPLE_THEME
 
 SORTS = (
     ("Song ID", "id"),
@@ -48,6 +49,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = controller or ApplicationController()
         self.setWindowTitle("USDB Scrapper")
+        self.setStyleSheet(PURPLE_THEME)
+        self._cover_icons: dict[int, QIcon] = {}
         self.resize(1100, 720)
         self._songs: list[SongEntry] = []
         self._jobs: tuple[DownloadItem, ...] = ()
@@ -65,6 +68,7 @@ class MainWindow(QMainWindow):
         self._build_settings()
         self._build_login()
         self.controller.results.connect(self._results)
+        self.controller.cover_ready.connect(self._cover_ready)
         self.controller.downloads.connect(self._downloads)
         self.controller.message.connect(self.statusBar().showMessage)
         self.controller.busy.connect(self._set_busy)
@@ -84,6 +88,10 @@ class MainWindow(QMainWindow):
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.horizontalHeader().setStretchLastSection(True)
         table.verticalHeader().hide()
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
+        table.setIconSize(QSize(64, 64))
+        table.verticalHeader().setDefaultSectionSize(82)
         return table
 
     def _build_search(self) -> None:
@@ -98,6 +106,7 @@ class MainWindow(QMainWindow):
         self.title = QLineEdit()
         self.title.setPlaceholderText("Song title")
         self.search_button = QPushButton("Search")
+        self.search_button.setObjectName("primary")
         self.search_button.clicked.connect(self._search)
         self.artist.returnPressed.connect(self._search)
         self.title.returnPressed.connect(self._search)
@@ -112,9 +121,11 @@ class MainWindow(QMainWindow):
         layout.addLayout(row)
         self.search_status = QLabel("Results include only songs with a supported YouTube link.")
         layout.addWidget(self.search_status)
-        self.results_table = self._table(["ID", "Artist", "Title", "Language", "Year"])
-        self.results_table.setColumnWidth(1, 240)
-        self.results_table.setColumnWidth(2, 350)
+        self.results_table = self._table(["Cover", "ID", "Artist", "Title", "Language", "Year"])
+        self.results_table.setColumnWidth(0, 90)
+        self.results_table.setColumnWidth(1, 80)
+        self.results_table.setColumnWidth(2, 240)
+        self.results_table.setColumnWidth(3, 350)
         bar = self.results_table.verticalScrollBar()
         bar.valueChanged.connect(self._scroll)
         layout.addWidget(self.results_table)
@@ -122,7 +133,8 @@ class MainWindow(QMainWindow):
         self.more_button = QPushButton("Load more")
         self.more_button.setEnabled(False)
         self.more_button.clicked.connect(self.controller.load_more)
-        self.download_button = QPushButton("Download selected")
+        self.download_button = QPushButton("Add to queue")
+        self.download_button.setObjectName("primary")
         self.download_button.clicked.connect(self._enqueue)
         actions.addWidget(self.more_button)
         actions.addStretch()
@@ -173,11 +185,41 @@ class MainWindow(QMainWindow):
             row = self.results_table.rowCount()
             self.results_table.insertRow(row)
             for column, value in enumerate(
-                (song.song_id, song.artist, song.title, song.language or "", song.year or "")
+                ("♫", song.song_id, song.artist, song.title, song.language or "", song.year or "")
             ):
                 self.results_table.setItem(row, column, QTableWidgetItem(str(value)))
             self._songs.append(song)
+            self._set_cover(self.results_table, row, song.song_id)
         self.more_button.setEnabled(more and not self._busy)
+
+    def _set_cover(self, table: QTableWidget, row: int, song_id: int) -> None:
+        cell = table.item(row, 0)
+        if cell is None:
+            return
+        if song_id in self._cover_icons:
+            cell.setText("")
+            cell.setIcon(self._cover_icons[song_id])
+        else:
+            cell.setToolTip("Cover unavailable or loading")
+
+    def _cover_ready(self, song_id: int, data: bytes) -> None:
+        pixmap = QPixmap()
+        if not pixmap.loadFromData(data):
+            return
+        self._cover_icons[song_id] = QIcon(
+            pixmap.scaled(
+                64,
+                64,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+        for row, song in enumerate(self._songs):
+            if song.song_id == song_id:
+                self._set_cover(self.results_table, row, song_id)
+        for row, item in enumerate(self._jobs):
+            if item.song.song_id == song_id:
+                self._set_cover(self.downloads_table, row, song_id)
 
     def _scroll(self, value: int) -> None:
         if (
@@ -191,19 +233,30 @@ class MainWindow(QMainWindow):
         rows = sorted({index.row() for index in self.results_table.selectedIndexes()})
         self.controller.enqueue([self._songs[row] for row in rows])
         if rows:
-            self.tabs.setCurrentIndex(1)
+            self.statusBar().showMessage(
+                f"Added {len(rows)} selected songs. Open Downloads to start the queue."
+            )
 
     def _build_downloads(self) -> None:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.addWidget(QLabel("Downloads — complete TXT, MP3, MP4 and cover bundles"))
-        self.downloads_table = self._table(["ID", "Artist", "Title", "State", "Progress / error"])
+        layout.addWidget(QLabel("Build your queue, then start downloads when you are ready."))
+        self.downloads_table = self._table(
+            ["Cover", "ID", "Artist", "Title", "State", "Progress / error"]
+        )
+        self.downloads_table.setColumnWidth(0, 90)
+        self.downloads_table.setColumnWidth(2, 230)
+        self.downloads_table.setColumnWidth(3, 300)
         layout.addWidget(self.downloads_table)
         row = QHBoxLayout()
         cancel = QPushButton("Cancel selected")
         retry = QPushButton("Retry selected")
         cancel.clicked.connect(lambda: self._download_action(False))
         retry.clicked.connect(lambda: self._download_action(True))
+        self.start_button = QPushButton("Start queued downloads")
+        self.start_button.setObjectName("start")
+        self.start_button.clicked.connect(self.controller.start_downloads)
+        row.addWidget(self.start_button)
         row.addWidget(cancel)
         row.addWidget(retry)
         row.addStretch()
@@ -211,7 +264,13 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(page, "Downloads")
 
     def _downloads(self, jobs: tuple[DownloadItem, ...], stages: dict[int, str]) -> None:
+        selected = {
+            self._jobs[i.row()].song.song_id
+            for i in self.downloads_table.selectedIndexes()
+            if i.row() < len(self._jobs)
+        }
         self._jobs = jobs
+        self.start_button.setEnabled(any(job.state is DownloadState.QUEUED for job in jobs))
         self.downloads_table.setRowCount(len(jobs))
         for row, item in enumerate(jobs):
             state = item.state
@@ -221,9 +280,23 @@ class MainWindow(QMainWindow):
                 else ""
             )
             for column, value in enumerate(
-                (item.song.song_id, item.song.artist, item.song.title, state.value, detail)
+                ("♫", item.song.song_id, item.song.artist, item.song.title, state.value, detail)
             ):
-                self.downloads_table.setItem(row, column, QTableWidgetItem(str(value)))
+                cell = QTableWidgetItem(str(value))
+                if column == 4:
+                    cell.setForeground(
+                        QColor(
+                            {
+                                DownloadState.COMPLETED: "#72dfc0",
+                                DownloadState.FAILED: "#ff8fa4",
+                                DownloadState.DOWNLOADING: "#d4b0ff",
+                                DownloadState.QUEUED: "#efcc7c",
+                            }.get(state, "#b9adca")
+                        )
+                    )
+                self.downloads_table.setItem(row, column, cell)
+                cell.setSelected(item.song.song_id in selected)
+            self._set_cover(self.downloads_table, row, item.song.song_id)
 
     def _download_action(self, retry: bool) -> None:
         for row in {index.row() for index in self.downloads_table.selectedIndexes()}:
@@ -264,7 +337,7 @@ class MainWindow(QMainWindow):
         form.addRow(forget)
         note = QLabel(
             "Downloads require yt-dlp, FFmpeg and ffprobe on PATH.\n"
-            "TXT export uses the UltraStar v2 draft with AUDIO headers."
+            "TXT export uses VERSION 1.0.0 with AUDIO headers and original timing."
         )
         note.setWordWrap(True)
         form.addRow(note)

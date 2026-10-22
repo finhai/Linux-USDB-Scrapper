@@ -36,3 +36,37 @@ def normalize_filesystem_name(value: str) -> str:
 
 
 __all__ = ["MAX_COMPONENT_LENGTH", "normalize_filesystem_name"]
+
+
+def readable_filesystem_name(value: str) -> str:
+    """Preserve readable Unicode names; suffix only lossy sanitization/truncation."""
+    import re
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Name must not be blank")
+    original = unicodedata.normalize("NFC", value).strip()
+    original.encode("utf-8")
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', "-", original).rstrip(" .")
+    if not name or name in (".", ".."):
+        name = "Untitled"
+    if name.split(".")[0].upper() in {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+        "COM¹",
+        "COM²",
+        "COM³",
+        "LPT¹",
+        "LPT²",
+        "LPT³",
+    }:
+        name = "_" + name
+    while len(name.encode("utf-8")) > 90:
+        name = name[:-1]
+    name = name.rstrip(" .")
+    if name != original:
+        name += " [" + hashlib.sha256(original.encode()).hexdigest()[:8] + "]"
+    return name

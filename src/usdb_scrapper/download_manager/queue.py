@@ -18,11 +18,19 @@ class DownloadQueue:
     the active count is below the new limit. Duplicate song IDs are rejected.
     """
 
-    def __init__(self, worker: Callable[[DownloadItem], Awaitable[None]], *, limit: int = 2):
+    def __init__(
+        self,
+        worker: Callable[[DownloadItem], Awaitable[None]],
+        *,
+        limit: int = 2,
+        autostart: bool = True,
+    ):
         self._validate_limit(limit)
         self._loop = asyncio.get_running_loop()
         self._worker = worker
         self._limit = limit
+        self._autostart = autostart
+        self._ready: set[int] = set()
         self._items: dict[int, DownloadItem] = {}
         self._pending: deque[int] = deque()
         self._active: dict[int, asyncio.Task[None]] = {}
@@ -67,6 +75,7 @@ class DownloadQueue:
         item = self._items[song_id]
         if item.state is DownloadState.QUEUED:
             self._pending.remove(song_id)
+            self._ready.discard(song_id)
             self._items[song_id] = item.transition(DownloadState.CANCELLED)
             self._pump()
         elif item.state is DownloadState.DOWNLOADING:
@@ -103,9 +112,21 @@ class DownloadQueue:
         self._limit = limit
         self._pump()
 
+    def start_pending(self) -> None:
+        """Start the currently queued batch; later additions await another start."""
+        self._check_loop()
+        self._ready.update(self._pending)
+        self._pump()
+
     def _pump(self) -> None:
         while self._pending and len(self._active) < self._limit:
-            song_id = self._pending.popleft()
+            song_id = next(
+                (sid for sid in self._pending if self._autostart or sid in self._ready), None
+            )
+            if song_id is None:
+                break
+            self._pending.remove(song_id)
+            self._ready.discard(song_id)
             self._items[song_id] = self._items[song_id].transition(DownloadState.DOWNLOADING)
             task = self._loop.create_task(self._run(self._items[song_id]))
             self._active[song_id] = task
