@@ -16,8 +16,9 @@ Each concern has a sibling package under src/usdb_scrapper:
 - controllers: application orchestration and translation to view-facing state.
 - frontend: Qt views; backend operations go through controllers.
 
-Packages remain empty until their card is implemented; domain exports SongEntry and UltraStarTxt; usdb_client exports UsdbSession. The entry point
-wires dependencies. Import public APIs, never another component's private modules.
+These packages are implemented. The entry point wires the Qt window and application
+controller; the controller composes authentication, search, storage and download
+services on a dedicated asyncio worker thread. Import public APIs, never another component's private modules.
 Network and download work must not block the GUI thread; dispatch through workers
 and deliver state changes to the GUI thread via Qt signals.
 
@@ -38,7 +39,8 @@ Never log passwords, cookies, authorization headers, or raw authenticated pages.
 ## Unresolved research
 
 The spike verified form POST and session cookies over HTTPS; the production client
-passed real-site login and subsequent-request acceptance on 2026-10-19. Combined search behavior, TXT wait-page behavior,
-and normalization aggressiveness still need empirical validation. The research
+passed real-site login and subsequent-request acceptance on 2026-10-19. Combined search, pagination, TXT wait-page retrieval and player-compatible export
+have since passed live probes. Search normalization preserves punctuation and
+accents; ASCII case and whitespace handling are backed by live comparisons. The research
 and roadmap documents mentioned on Trello were not provided; the snapshot only
 captures card descriptions. Implement no assumptions as settled protocol facts.

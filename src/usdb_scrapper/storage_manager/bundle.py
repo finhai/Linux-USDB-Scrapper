@@ -105,7 +105,10 @@ def recover_directory(parent: Path) -> int:
     for journal in parent.glob(".usdb-txn-*.json"):
         name = journal.name[len(".usdb-txn-") : -len(".json")]
         try:
-            with FileLock(str(parent / f".usdb-lock-{name}"), timeout=0):
+            # Windows can release a terminated process's byte-range lock shortly
+            # after its process handle signals completion. Allow a bounded grace
+            # period while still skipping a transaction owned by a live process.
+            with FileLock(str(parent / f".usdb-lock-{name}"), timeout=0.5, preserve_lock_file=True):
                 _recover(journal)
                 count += 1
         except Timeout:
@@ -129,7 +132,10 @@ class BundleStage:
         if self.destination.name in ("", ".", "..") or self.destination.is_symlink():
             raise BundleStorageError("Invalid bundle directory")
         self.destination.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = FileLock(str(self.destination.parent / f".usdb-lock-{self.destination.name}"))
+        self._lock = FileLock(
+            str(self.destination.parent / f".usdb-lock-{self.destination.name}"),
+            preserve_lock_file=True,
+        )
         try:
             self._lock.acquire(timeout=0)
         except Timeout:

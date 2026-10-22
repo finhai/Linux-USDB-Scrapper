@@ -40,3 +40,11 @@ Packaging CI now includes the built Linux artifact in clean Debian 12 and Fedora
 42 containers, installing only runtime libraries and checking app, media-worker,
 and offscreen GUI lifecycle. Results must pass before this acceptance is closed;
 these tests do not exercise native credential dialogs or interactive playback.
+
+Packaging workflow 39768286608 passed on 2026-10-22: Ubuntu and Windows
+package builds plus packaged GUI smoke checks, and clean Debian 12/Fedora 42
+container startup/shutdown. The first container run exposed missing libGL.so.1;
+the runtime dependency lists and install instructions now include it.
+Windows test run 39768286629 exposed intermittent post-termination lock contention.
+Recovery now allows a bounded 0.5-second acquisition grace and preserves lock-file
+identity. Local 500-test validation passes; Windows confirmation is pending.
