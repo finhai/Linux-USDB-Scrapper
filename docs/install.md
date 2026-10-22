@@ -62,3 +62,10 @@ See [desktop behavior](desktop.md), [transaction limitations](library-recovery.m
 and [player export](player-export.md) for implementation details.
 
 Latest evidence is recorded in [validation](validation-2026-10-22.md).
+
+
+Minimal Linux systems need Qt runtime libraries. Debian/Ubuntu: install `libegl1`,
+`libgl1`, `libopengl0`, `libxkbcommon0`, `libfontconfig1`, and `libdbus-1-3`.
+Fedora: install `libglvnd-egl`, `libglvnd-glx`, `libglvnd-opengl`, `libxkbcommon`,
+`fontconfig`, and `dbus-libs`. These cover the offscreen package smoke test;
+interactive X11/Wayland sessions also need their normal desktop libraries.
