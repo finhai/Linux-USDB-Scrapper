@@ -28,3 +28,15 @@ bundle after an interrupted replacement. Process-kill recovery tests pass.
 Remaining release acceptance: clean Windows GUI/credential/media behavior, two distinct Linux distributions,
 actual UltraStar playback (the latest 2026.10.0 player rejects v2; version 1.0.0 AUDIO-only export is now selected and implemented), and final review/merge. The project is not yet
 claimed finished or ready for a production release.
+
+
+Player-compatible export update: all 500 offline tests pass. A fresh authenticated
+Song 3289 round trip verified VERSION 1.0.0, AUDIO-only headers, unchanged BPM and
+notes, and repeat-export identity using saved credentials. UltraStar Deluxe
+2026.10.0 is installed as Flatpak, but launch failed with "Unable to allocate
+instance id" in this execution session; this is not a playback pass.
+
+Packaging CI now includes the built Linux artifact in clean Debian 12 and Fedora
+42 containers, installing only runtime libraries and checking app, media-worker,
+and offscreen GUI lifecycle. Results must pass before this acceptance is closed;
+these tests do not exercise native credential dialogs or interactive playback.
