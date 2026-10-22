@@ -1,5 +1,6 @@
 """Public USDB session API."""
 
+from usdb_scrapper.usdb_client.content import decode_html, extract_txt
 from usdb_scrapper.usdb_client.details import (
     DetailClient,
     DetailParseError,
@@ -33,8 +34,15 @@ from usdb_scrapper.usdb_client.session import (
     UsdbError,
     UsdbSession,
 )
+from usdb_scrapper.usdb_client.session_errors import ContentDecodeError
+from usdb_scrapper.usdb_client.txt import TxtClient, TxtRetrievalError
 
 __all__ = [
+    "ContentDecodeError",
+    "decode_html",
+    "extract_txt",
+    "TxtClient",
+    "TxtRetrievalError",
     "PipelineError",
     "SearchPipeline",
     "SearchStages",
@@ -59,3 +67,5 @@ __all__ = [
     "UsdbError",
     "UsdbSession",
 ]
+
+from usdb_scrapper.usdb_client.session import SessionExpiredError as SessionExpiredError

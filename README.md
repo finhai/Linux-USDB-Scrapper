@@ -3,9 +3,14 @@
 A Python + PySide6 desktop application for Linux and Windows, planned in
 [Trello](https://trello.com/b/KnffFXKA/usdb-scrapper-linux).
 
-Current branch: desktop shell, domain models, session client, paginated search,
-YouTube detail extraction, and a staged search pipeline. Backend APIs are available
-in Python; the desktop UI still has no login, search, downloads, or library management.
+The desktop now provides deferred login, paginated search, a download queue with
+cancel/retry, and persistent settings. Downloads create TXT/MP3/MP4/JPG bundles
+under normalized Artist/Song directories, with restart recovery. Credentials use
+the native OS keyring when available.
+
+See [install and first run](docs/install.md) for launch commands and the remaining
+release-validation limits. This is a development build, not yet a verified
+cross-platform release.
 
 ## Start developing
 
@@ -33,8 +38,8 @@ The second builds a Python wheel and source distribution, not a standalone deskt
 See [contributing](CONTRIBUTING.md), [architecture](docs/architecture.md),
 [release workflow](docs/releases.md), and the [Trello snapshot](docs/backlog.md).
 
-## Next work
+## Validation status
 
-The [session client](docs/session-client.md) passed real-site login and subsequent
-request verification. Continue with the remaining authentication/search cards.
-Keep credentials and session captures out of Git.
+The real-site login, pagination, TXT retrieval and draft-v2 round trip have been
+verified. A real four-file bundle and offline desktop workflow now pass too.
+Clean-platform packaging and UltraStar playback acceptance remain open.

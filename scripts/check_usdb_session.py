@@ -1,9 +1,9 @@
 """Manual real-site acceptance check for the production session client."""
 
-import getpass
 import json
 import sys
 
+from usdb_scrapper.credential_manager.terminal import get_credentials
 from usdb_scrapper.usdb_client import UsdbError, UsdbSession
 
 
@@ -12,8 +12,7 @@ def main():
         print("Run in your own terminal; do not pipe credentials.")
         return 2
     try:
-        username = getpass.getpass("USDB username (hidden): ")
-        password = getpass.getpass("USDB password (hidden): ")
+        username, password = get_credentials()
         with UsdbSession() as session:
             session.login(username, password)
             username = password = ""

@@ -11,24 +11,29 @@ class UltraStarTxt:
 
     The parser supplies normalized values, including a Decimal BPM. The note
     block remains exactly as supplied: no splitting, stripping, or validation
-    of note syntax. Media references are text, not filesystem operations.
+    of note syntax. Missing source version/cover metadata is represented by None.
+    Media references are text, not filesystem operations.
     """
 
-    version: str
+    version: str | None = None
     title: str
     artist: str
     audio: str
     bpm: Decimal
     video: str
-    cover: str
+    cover: str | None = None
     note_block: str
     genre: str | None = None
 
     def __post_init__(self) -> None:
-        for name in ("version", "title", "artist", "audio", "video", "cover"):
+        for name in ("title", "artist", "audio", "video"):
             _header_value(name, getattr(self, name))
-        if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", self.version) is None:
-            raise ValueError("version must be a numeric major.minor.patch triplet")
+        if self.version is not None:
+            _header_value("version", self.version)
+            if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", self.version) is None:
+                raise ValueError("version must be a numeric major.minor.patch triplet")
+        if self.cover is not None:
+            _header_value("cover", self.cover)
         if not isinstance(self.bpm, Decimal):
             raise TypeError("bpm must be a Decimal")
         if not self.bpm.is_finite() or self.bpm <= 0:

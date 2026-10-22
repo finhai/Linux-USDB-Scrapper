@@ -8,17 +8,21 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 
 import httpx
 
+from usdb_scrapper.credential_manager import CredentialProvider
+from usdb_scrapper.usdb_client.content import decode_html
+from usdb_scrapper.usdb_client.session_errors import UsdbError as UsdbError
+
 ORIGIN = "https://usdb.animux.de"
 LOGIN_URL = ORIGIN + "/?link=login"
 LIST_URL = ORIGIN + "/?link=list"
 
 
-class UsdbError(Exception):
-    """Base for sanitized client errors safe to show without response content."""
-
-
 class AuthenticationError(UsdbError):
     """Authentication was required or could not be confirmed."""
+
+
+class SessionExpiredError(AuthenticationError):
+    """A previously authenticated request requires login again."""
 
 
 class TransportError(UsdbError):
@@ -66,14 +70,17 @@ class _Page(HTMLParser):
 
     @property
     def denied(self) -> bool:
-        return "not logged in" in " ".join(self.text).lower()
+        return "you are not logged in" in " ".join(" ".join(self.text).lower().split())
 
     @property
     def has_login_form(self) -> bool:
         return any(
-            (item.get("type") or "").lower() == "password"
+            {"user", "pass"}.issubset({item.get("name") for item in form.inputs})
+            and any(
+                item.get("name") == "pass" and (item.get("type") or "").lower() == "password"
+                for item in form.inputs
+            )
             for form in self.forms
-            for item in form.inputs
         )
 
     @property
@@ -94,13 +101,18 @@ def _same_origin(url: str) -> bool:
 
 
 class UsdbSession:
-    """One in-memory session. Single-worker ownership; no automatic retries.
+    """One in-memory session. Single-worker ownership; one optional retry after session expiry.
 
     Close explicitly or use a context manager. Closing clears local cookies,
     not the session on the remote server. Never log returned HTML or credentials.
     """
 
-    def __init__(self, *, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        credential_provider: CredentialProvider | None = None,
+    ) -> None:
         self._client = httpx.Client(
             transport=transport,
             timeout=httpx.Timeout(20, connect=10),
@@ -108,6 +120,7 @@ class UsdbSession:
             headers={"User-Agent": "USDB-Scrapper/0.1"},
         )
         self._authenticated = False
+        self._credential_provider = credential_provider
 
     @property
     def authenticated(self) -> bool:
@@ -149,7 +162,7 @@ class UsdbSession:
         fields: dict[str, str] = {}
         try:
             response = self._request("GET", LOGIN_URL)
-            page = _Page(response.text)
+            page = _Page(decode_html(response.content, response.charset_encoding))
             forms = [
                 form
                 for form in page.forms
@@ -192,11 +205,29 @@ class UsdbSession:
 
     def get_html(self, path: str = "/?link=list") -> str:
         """Read a same-origin page using this authenticated session."""
-        return self._authenticated_html("GET", path)
+        return self._with_reauthentication("GET", path)
 
     def post_html(self, path: str, fields: Mapping[str, str]) -> str:
         """Submit same-origin form data using this session (e.g. a search)."""
-        return self._authenticated_html("POST", path, dict(fields))
+        return self._with_reauthentication("POST", path, dict(fields))
+
+    def _with_reauthentication(
+        self, method: str, path: str, fields: dict[str, str] | None = None
+    ) -> str:
+        try:
+            return self._authenticated_html(method, path, fields)
+        except SessionExpiredError:
+            if self._credential_provider is None:
+                raise
+            credentials = self._credential_provider.get_credentials()
+            if credentials is None:
+                raise
+            try:
+                self.login(credentials.username, credentials.password)
+            finally:
+                del credentials
+        # Deliberately outside the handler: a second expiry is not retried.
+        return self._authenticated_html(method, path, fields)
 
     def _authenticated_html(
         self, method: str, path: str, fields: dict[str, str] | None = None
@@ -205,21 +236,30 @@ class UsdbSession:
         if not self.authenticated:
             raise AuthenticationError("Login is required")
         try:
-            response = self._request(method, urljoin(ORIGIN + "/", path), fields)
-            page = _Page(response.text)
+            response = self._request(
+                method, urljoin(ORIGIN + "/", path), fields, authenticated_request=True
+            )
+            page = _Page(decode_html(response.content, response.charset_encoding))
             if page.denied or page.has_login_form:
-                raise AuthenticationError("USDB requires login again")
+                raise SessionExpiredError("USDB requires login again")
         except AuthenticationError:
             self._forget_session()
-            raise
-        return response.text
+            raise SessionExpiredError("USDB requires login again") from None
+        return decode_html(response.content, response.charset_encoding)
 
     def _request(
-        self, method: str, url: str, fields: dict[str, str] | None = None
+        self,
+        method: str,
+        url: str,
+        fields: dict[str, str] | None = None,
+        *,
+        authenticated_request: bool = False,
     ) -> httpx.Response:
         for _ in range(6):
             if not _same_origin(url):
                 raise TransportError("Request destination is not the trusted origin")
+            if authenticated_request and "login" in parse_qs(urlsplit(url).query).get("link", []):
+                raise SessionExpiredError("USDB requires login again")
             try:
                 response = self._client.request(method, url, data=fields)
             except httpx.HTTPError:

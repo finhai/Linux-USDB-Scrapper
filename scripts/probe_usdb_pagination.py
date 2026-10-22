@@ -1,12 +1,12 @@
 """Bounded live pagination discovery; no raw pages or account controls emitted."""
 
-import getpass
 import json
 import sys
 import time
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urljoin, urlsplit
 
+from usdb_scrapper.credential_manager.terminal import get_credentials
 from usdb_scrapper.usdb_client import UsdbError, UsdbSession
 
 
@@ -116,8 +116,7 @@ def main():
         print("Run in your own terminal; do not pipe credentials.")
         return 2
     try:
-        username = getpass.getpass("USDB username (hidden): ")
-        password = getpass.getpass("USDB password (hidden): ")
+        username, password = get_credentials()
         report = {
             "scope": "candidate leaf table rows; not yet a validated result parser",
             "pages": {},
