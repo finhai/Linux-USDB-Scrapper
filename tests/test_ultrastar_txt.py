@@ -77,9 +77,7 @@ def test_non_text_is_rejected(song, field):
         replace(song, **{field: 42})
 
 
-@pytest.mark.parametrize(
-    "field", ["version", "title", "artist", "audio", "video", "cover", "note_block"]
-)
+@pytest.mark.parametrize("field", ["title", "artist", "audio", "video", "note_block"])
 def test_required_fields_cannot_be_none(song, field):
     with pytest.raises(TypeError, match=field):
         replace(song, **{field: None})
@@ -118,3 +116,10 @@ def test_version_and_bpm_are_not_converted(song, version):
     updated = replace(song, version=version)
     assert updated.version == version
     assert updated.bpm == song.bpm
+
+
+def test_missing_source_version_and_cover_are_explicit(song):
+    updated = replace(song, version=None, cover=None)
+    assert updated.version is None
+    assert updated.cover is None
+    assert updated.note_block == song.note_block

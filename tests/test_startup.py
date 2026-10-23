@@ -29,7 +29,7 @@ app = QApplication([])
 window = MainWindow()
 window.show()
 assert window.isVisible()
-QTimer.singleShot(0, app.quit)
+QTimer.singleShot(0, window.close)
 assert app.exec() == 0
 """,
         ],
