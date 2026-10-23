@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 
 from usdb_scrapper.domain.download_item import DownloadItem, DownloadState
+from usdb_scrapper.download_manager.bundle import BundleDownloadError
 
 
 class DownloadQueue:
@@ -143,6 +144,10 @@ class DownloadQueue:
             task.result()
         except asyncio.CancelledError:
             self._items[song_id] = self._items[song_id].transition(DownloadState.CANCELLED)
+        except BundleDownloadError as error:
+            self._items[song_id] = self._items[song_id].transition(
+                DownloadState.FAILED, error=str(error)
+            )
         except Exception:
             logging.getLogger(__name__).warning("Download failed; retry is available")
             # Worker errors may carry URLs/credentials. Only publish a generic state.

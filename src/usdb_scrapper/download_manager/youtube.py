@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 
 import psutil
 
-from usdb_scrapper.download_manager.media import MediaDownloadError
+from usdb_scrapper.download_manager.media import MediaDownloadError, MediaFailure
 from usdb_scrapper.usdb_client.details import youtube_url
 
 
@@ -28,6 +28,29 @@ def media_tool(name: str) -> str | None:
         if candidate.is_file():
             return str(candidate)
     return shutil.which(name)
+
+
+async def _stderr_tail(stream: asyncio.StreamReader) -> bytes:
+    """Drain continuously, retaining at most 8 KiB in memory; never log raw output."""
+    tail = b""
+    while chunk := await stream.read(4096):
+        tail = (tail + chunk)[-8192:]
+    return tail
+
+
+def _failure_reason(stderr: bytes) -> MediaFailure:
+    text = stderr.lower()
+    if b"403" in text:
+        return MediaFailure.FORBIDDEN
+    if b"429" in text:
+        return MediaFailure.RATE_LIMIT
+    if b"requested format is not available" in text:
+        return MediaFailure.FORMAT
+    if any(marker in text for marker in (b"video unavailable", b"sign in", b"private video")):
+        return MediaFailure.UNAVAILABLE
+    if any(marker in text for marker in (b"timed out", b"unable to download", b"connection")):
+        return MediaFailure.NETWORK
+    return MediaFailure.UNKNOWN
 
 
 class YtDlpDownloader:
@@ -107,9 +130,11 @@ class YtDlpDownloader:
                     cwd=folder,
                     stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
                     start_new_session=os.name == "posix",
                 )
+                assert process.stderr is not None
+                diagnostics = asyncio.create_task(_stderr_tail(process.stderr))
                 try:
                     async with asyncio.timeout(self._timeout):
                         result = await process.wait()
@@ -133,9 +158,12 @@ class YtDlpDownloader:
                         except psutil.NoSuchProcess:
                             pass
                     await process.wait()
+                    stderr = await diagnostics
                 output = folder / f"media.{extension}"
                 if result != 0 or output.is_symlink() or not output.is_file():
-                    raise MediaDownloadError("YouTube download failed")
+                    raise MediaDownloadError(
+                        "YouTube download failed", reason=_failure_reason(stderr)
+                    )
                 if output.stat().st_size == 0:
                     raise MediaDownloadError("YouTube produced empty media")
                 # A hard link publishes without overwriting an existing target.

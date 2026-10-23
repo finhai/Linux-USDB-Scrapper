@@ -94,3 +94,25 @@ def test_missing_tools(tmp_path, monkeypatch):
     monkeypatch.setattr("usdb_scrapper.download_manager.youtube.media_tool", lambda name: None)
     with pytest.raises(MediaDownloadError, match="Install"):
         asyncio.run(YtDlpDownloader().audio(URL, tmp_path / "song.mp3"))
+
+
+@pytest.mark.parametrize(
+    "diagnostic, expected",
+    [
+        ("HTTP Error 403: Forbidden", "FORBIDDEN"),
+        ("HTTP Error 429", "RATE_LIMIT"),
+        ("Requested format is not available", "FORMAT"),
+        ("Video unavailable", "UNAVAILABLE"),
+        ("Connection timed out", "NETWORK"),
+        ("unknown private-token", "UNKNOWN"),
+    ],
+)
+def test_failure_classification_discards_raw_output(tmp_path, monkeypatch, diagnostic, expected):
+    adapter = fake_tool(
+        tmp_path, monkeypatch, f"sys.stderr.write('x' * 100000 + {diagnostic!r}); sys.exit(1)"
+    )
+    with pytest.raises(MediaDownloadError) as caught:
+        asyncio.run(adapter.audio(URL, tmp_path / "song.mp3"))
+    assert caught.value.reason.name == expected
+    assert "private-token" not in str(caught.value)
+    assert not list(tmp_path.glob(".usdb-media-*"))

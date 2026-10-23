@@ -81,6 +81,8 @@ def test_failed_transfer_never_marks_partial_bundle_done(tmp_path, kind):
     result = run(Source(fail=kind), root)
     assert result.state is DownloadState.FAILED
     assert "private" not in result.error
+    operation = "Retrieving TXT" if kind == "txt" else f"Downloading {kind}"
+    assert result.error == f"{operation} failed; retry the download"
     assert not root.exists()
     assert not list(tmp_path.glob(".usdb-partial-*"))
 
@@ -159,3 +161,16 @@ def test_media_implementation_can_be_replaced_without_changing_bundle(tmp_path):
             assert (tmp_path / str(index) / "song.mp3").is_file()
 
     asyncio.run(run())
+
+
+def test_safe_media_reason_reaches_queue(tmp_path):
+    from usdb_scrapper.download_manager.media import MediaDownloadError, MediaFailure
+
+    class FailedMedia(Source):
+        async def fetch_video(self, song, target):
+            raise MediaDownloadError("private URL", reason=MediaFailure.FORBIDDEN)
+
+    result = run(FailedMedia(), tmp_path / "song")
+    assert result.state is DownloadState.FAILED
+    assert result.error == "Downloading video: YouTube refused the media request (403); retry later"
+    assert "private" not in result.error

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from usdb_scrapper.domain.download_item import DownloadItem, DownloadState
+from usdb_scrapper.download_manager.media import MediaDownloadError
 from usdb_scrapper.parser import LocalMedia, ParsedTxt, serialize_v1_txt
 from usdb_scrapper.storage_manager.bundle import BundleStage
 
@@ -28,7 +29,7 @@ class BundleWorker:
 
     Adapters write exactly the given paths and validate downloaded formats.
     Completion verifies presence/nonzero sizes, not that media is decodable.
-    Storage supports new directories only. Existing entries fail unchanged.
+    Storage stages replacements and restores existing files on failure.
     """
 
     def __init__(self, source: BundleSource, *, progress: Callable[[int, str], None] | None = None):
@@ -38,13 +39,16 @@ class BundleWorker:
     async def __call__(self, item: DownloadItem) -> None:
         if item.state is not DownloadState.DOWNLOADING:
             raise BundleDownloadError("Bundle worker requires a downloading item")
+        operation = "Preparing library files"
         stage: BundleStage | None = None
         try:
             stage = BundleStage(item.bundle)
-            self._progress(item.song.song_id, "Retrieving TXT")
+            operation = "Retrieving TXT"
+            self._progress(item.song.song_id, operation)
             parsed = await self._source.fetch_txt(item.song.song_id)
             paths = stage.paths
             # Validate export before spending time downloading media.
+            operation = "Exporting TXT"
             data = serialize_v1_txt(
                 parsed,
                 LocalMedia(
@@ -53,19 +57,26 @@ class BundleWorker:
                     cover=paths["cover"].name,
                 ),
             )
-            self._progress(item.song.song_id, "Downloading audio")
+            operation = "Downloading audio"
+            self._progress(item.song.song_id, operation)
             await self._source.fetch_audio(parsed, paths["audio"])
-            self._progress(item.song.song_id, "Downloading video")
+            operation = "Downloading video"
+            self._progress(item.song.song_id, operation)
             await self._source.fetch_video(parsed, paths["video"])
-            self._progress(item.song.song_id, "Downloading cover")
+            operation = "Downloading cover"
+            self._progress(item.song.song_id, operation)
             await self._source.fetch_cover(parsed, paths["cover"])
+            operation = "Writing TXT"
             paths["txt"].write_bytes(data)
-            self._progress(item.song.song_id, "Publishing bundle")
+            operation = "Publishing bundle"
+            self._progress(item.song.song_id, operation)
             stage.publish()
         except asyncio.CancelledError:
             raise
+        except MediaDownloadError as error:
+            raise BundleDownloadError(f"{operation}: {error.reason.value}") from None
         except Exception:
-            raise BundleDownloadError("Four-file bundle could not be completed") from None
+            raise BundleDownloadError(f"{operation} failed; retry the download") from None
         finally:
             if stage is not None:
                 try:
