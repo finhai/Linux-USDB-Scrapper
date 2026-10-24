@@ -19,11 +19,12 @@ from usdb_scrapper.frontend.window import MainWindow
 
 class Store:
     def load(self): return None
+    def load_recent(self): return None
     def save(self, credentials): pass
     def forget(self): pass
 class Provider:
     def __init__(self, **kwargs): pass
-    def get_credentials(self): return None
+    def get_credentials(self): raise AssertionError("Desktop must never load saved credentials")
 class Gateway:
     def __init__(self, credentials, provider): pass
     def verify(self): pass
@@ -55,27 +56,40 @@ store.save(Settings(storage_root=str(Path('library').resolve())))
 controller = module.ApplicationController(store)
 window = MainWindow(controller)
 window.show()
-assert not window.login_dialog.isVisible()
+assert window.pages.currentWidget() is window.login_page
+assert not window.tabs.isVisible()
 window.artist.setText('Artist')
-window.search_button.click()
 phase = 0
 errors = []
 
 def poll():
     global phase
     try:
-        if phase == 0 and window.login_dialog.isVisible():
+        if (phase == 0 and window.pages.currentWidget() is window.login_page
+                and window.login_button.isEnabled()):
             window.username.setText('demo')
             window.password.setText('synthetic')
             window._login()
+            phase = 10
+        elif phase == 10 and window.pages.currentWidget() is window.tabs:
+            window.search_button.click()
             phase = 1
         elif phase == 1 and window.results_table.rowCount() == 1:
             assert window.password.text() == ''
             window.results_table.selectRow(0)
             window.download_button.click()
+            assert not window.download_button.isEnabled()
+            assert window.results_table.item(0, 6).text() == 'Adding…'
+            window.download_button.click()  # A second click must not submit again.
             phase = 2
         elif phase == 2 and window._jobs and window._cover_icons:
+            assert len(window._jobs) == 1
             assert window._jobs[0].state.value == 'queued'
+            assert window.results_table.item(0, 6).text() == 'Queued'
+            assert not window.download_button.isEnabled()
+            assert window.download_button.text() == 'Already in Downloads'
+            assert window.tabs.tabText(1) == 'Downloads (1)'
+            assert 'Added 1 to queue' in window.queue_feedback.text()
             assert not Path(window._jobs[0].bundle.txt).exists()
             window.start_button.click()
             phase = 20

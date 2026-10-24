@@ -22,6 +22,7 @@ jobs:
       - run: uv sync --locked
       - run: uv run python scripts/build_desktop.py
       - run: uv run python scripts/check_package.py
+      - run: uv run python scripts/package_release.py
       - if: runner.os == 'Linux'
         run: dist/USDB-Scrapper/USDB-Scrapper --version && tar -czf dist/USDB-Scrapper-linux.tar.gz -C dist USDB-Scrapper
       - if: runner.os == 'Windows'
@@ -32,6 +33,9 @@ jobs:
           path: |
             dist/USDB-Scrapper-linux.tar.gz
             dist/USDB-Scrapper/
+            dist/*.AppImage
+            dist/*windows-x86_64.zip
+            dist/*.sha256
 
   linux-distributions:
     needs: package

@@ -22,7 +22,7 @@ class DownloadSources:
         return await self._txt(song_id)
 
     async def fetch_audio(self, song: ParsedTxt, target: Path) -> None:
-        await self._media.audio(song.song.video, target)
+        await self._media.audio(song.audio_source or song.song.video, target)
 
     async def fetch_video(self, song: ParsedTxt, target: Path) -> None:
         await self._media.video(song.song.video, target)

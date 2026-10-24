@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — release candidate build
+
+- Add a startup login page and opt-in native-keyring login with fixed 30-day expiry.
+- Build Linux AppImage and Windows portable EXE packages with FFmpeg/ffprobe.
+- Keep coordination locks outside the music library; use title-only song folders.
+- Recognize separate audio/video source tags and serialize USDB TXT countdowns.
+- Show immediate queue confirmation and prevent repeated add clicks.
+
+## Development history
 
 - Add purple interface styling, USDB cover thumbnails, and explicit queue start.
 - Use readable Artist/Title directories and title-based media filenames.

@@ -45,7 +45,7 @@ def main() -> int:
     app = QApplication(sys.argv[:1])
     app.setApplicationName("USDB Scrapper")
     app.setApplicationVersion(__version__)
-    window = MainWindow()
+    window = MainWindow(restore_login=not args.smoke_test)
     window.show()
     if args.smoke_test:
         from PySide6.QtCore import QTimer

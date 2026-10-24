@@ -17,7 +17,7 @@ def test_artist_layout_identity_and_root(tmp_path):
     assert library.bundle(replace(song, artist="ACDC")).txt.parent.parent != first.txt.parent.parent
     assert song.artist == "AC/DC"
     assert first.txt.name == "Song One.txt"
-    assert first.txt.parent.name == "Song One [USDB 1]"
+    assert first.txt.parent.name == "Song One"
     assert Library(tmp_path / "new").bundle(song).txt.is_relative_to(tmp_path / "new")
 
 

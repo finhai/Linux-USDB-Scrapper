@@ -65,6 +65,11 @@ class DownloadQueue:
         song_id = item.song.song_id
         if song_id in self._items:
             raise ValueError("Song is already in this queue")
+        if any(
+            existing.bundle.txt.parent == item.bundle.txt.parent
+            for existing in self._items.values()
+        ):
+            raise ValueError("Another queued song uses the same artist/title folder")
         self._items[song_id] = item
         self._pending.append(song_id)
         self._idle.clear()

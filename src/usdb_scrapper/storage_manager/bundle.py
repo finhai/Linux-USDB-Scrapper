@@ -10,6 +10,7 @@ from pathlib import Path
 from filelock import FileLock, Timeout
 
 from usdb_scrapper.domain.download_item import DownloadBundle
+from usdb_scrapper.storage_manager.locks import bundle_lock_path
 
 KINDS = ("txt", "audio", "video", "cover")
 
@@ -108,7 +109,9 @@ def recover_directory(parent: Path) -> int:
             # Windows can release a terminated process's byte-range lock shortly
             # after its process handle signals completion. Allow a bounded grace
             # period while still skipping a transaction owned by a live process.
-            with FileLock(str(parent / f".usdb-lock-{name}"), timeout=0.5, preserve_lock_file=True):
+            with FileLock(
+                str(bundle_lock_path(parent / name)), timeout=0.5, preserve_lock_file=True
+            ):
                 _recover(journal)
                 count += 1
         except Timeout:
@@ -133,7 +136,7 @@ class BundleStage:
             raise BundleStorageError("Invalid bundle directory")
         self.destination.parent.mkdir(parents=True, exist_ok=True)
         self._lock = FileLock(
-            str(self.destination.parent / f".usdb-lock-{self.destination.name}"),
+            str(bundle_lock_path(self.destination)),
             preserve_lock_file=True,
         )
         try:

@@ -19,10 +19,10 @@ def test_manual_start_does_not_include_later_additions():
             return DownloadItem(
                 song=SongEntry(song_id=song_id, artist="A", title="T"),
                 bundle=DownloadBundle(
-                    txt=PurePath("a.txt"),
-                    audio=PurePath("a.mp3"),
-                    video=PurePath("a.mp4"),
-                    cover=PurePath("a.jpg"),
+                    txt=PurePath(str(song_id)) / PurePath("a.txt"),
+                    audio=PurePath(str(song_id)) / PurePath("a.mp3"),
+                    video=PurePath(str(song_id)) / PurePath("a.mp4"),
+                    cover=PurePath(str(song_id)) / PurePath("a.jpg"),
                 ),
             )
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 from usdb_scrapper.domain import UltraStarTxt
+from usdb_scrapper.usdb_client.details import youtube_url
 
 
 class TxtParseError(ValueError):
@@ -16,6 +17,7 @@ class ParsedTxt:
     song: UltraStarTxt
     extra_headers: tuple[tuple[str, str], ...]
     video_metadata: tuple[tuple[str, str], ...] = ()
+    audio_source: str | None = None
     source_headers: tuple[str, ...] = field(default=(), compare=False, repr=False)
 
 
@@ -63,21 +65,39 @@ def parse_txt(
 
     video = required("VIDEO", default_video)
     video_metadata: dict[str, str] = {}
-    if video.startswith("v="):
+    audio_source = None
+    if re.match(r"[a-z][a-z0-9_-]*=", video):
         for part in video.split(","):
             key, separator, value = part.partition("=")
             if (
                 not separator
-                or not re.fullmatch(r"[a-z][a-z0-9_]*", key)
+                or not re.fullmatch(r"[a-z][a-z0-9_-]*", key)
                 or not value
                 or key in video_metadata
             ):
                 raise TxtParseError("Malformed or duplicate VIDEO meta-tag")
             video_metadata[key] = value
-        video_id = video_metadata.pop("v")
-        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
-            raise TxtParseError("Invalid VIDEO meta-tag ID")
-        video = "https://www.youtube.com/watch?v=" + video_id
+
+        def resource(value: str) -> str:
+            if re.fullmatch(r"[A-Za-z0-9_-]{11}", value):
+                return "https://www.youtube.com/watch?v=" + value
+            canonical = youtube_url(value)
+            if canonical is None:
+                raise TxtParseError("Unsupported VIDEO meta-tag resource")
+            return canonical
+
+        audio_value = video_metadata.get("a")
+        video_value = video_metadata.pop("v", None)
+        if audio_value is not None:
+            audio_source = resource(audio_value)
+        if video_value is None and audio_source is None:
+            raise TxtParseError("Missing audio/video resource in VIDEO meta-tag")
+        # Audio-only YouTube sources can still provide their own visual stream.
+        if video_value is not None:
+            video = resource(video_value)
+        else:
+            assert audio_source is not None
+            video = audio_source
     try:
         song = UltraStarTxt(
             version=headers.get("VERSION", default_version),
@@ -97,5 +117,6 @@ def parse_txt(
         song,
         tuple((key, val) for key, val in headers.items() if key not in known),
         tuple(video_metadata.items()),
-        tuple(source_headers),
+        source_headers=tuple(source_headers),
+        audio_source=audio_source,
     )

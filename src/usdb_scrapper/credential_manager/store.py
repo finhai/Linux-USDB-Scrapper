@@ -2,6 +2,7 @@
 
 import json
 import sys
+import time
 from dataclasses import dataclass, field
 
 from keyring.backend import KeyringBackend
@@ -9,6 +10,7 @@ from keyring.errors import PasswordDeleteError
 
 SERVICE = "Linux-USDB-Scrapper/USDB"
 ACCOUNT = "remembered-account"
+REMEMBER_SECONDS = 30 * 24 * 60 * 60
 
 
 class CredentialStoreError(ValueError):
@@ -55,6 +57,22 @@ class CredentialStore:
         except Exception:
             raise CredentialStoreError("Remembered credentials could not be read") from None
 
+    def load_recent(self) -> tuple[Credentials, float] | None:
+        """Desktop login is opt-in, bounded to 30 days, and never extended by reads."""
+        try:
+            value = _native_backend().get_password(SERVICE, ACCOUNT)
+            if value is None:
+                return None
+            data = json.loads(value)
+            saved_at = data.get("saved_at")
+            if type(saved_at) not in (int, float):
+                return None  # Older entries have no trustworthy expiry.
+            if not 0 <= time.time() - saved_at < REMEMBER_SECONDS:
+                return None
+            return Credentials(data["username"], data["password"]), saved_at + REMEMBER_SECONDS
+        except Exception:
+            raise CredentialStoreError("Remembered credentials could not be read") from None
+
     def save(self, credentials: Credentials) -> None:
         try:
             _native_backend().set_password(
@@ -64,6 +82,7 @@ class CredentialStore:
                     {
                         "username": credentials.username,
                         "password": credentials.password,
+                        "saved_at": time.time(),
                     }
                 ),
             )

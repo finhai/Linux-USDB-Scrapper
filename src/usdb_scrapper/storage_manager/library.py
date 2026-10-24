@@ -14,7 +14,7 @@ class Library:
     def bundle(self, song: SongEntry) -> DownloadBundle:
         artist = readable_filesystem_name(song.artist)
         title = readable_filesystem_name(song.title)
-        directory = self.root / artist / f"{title} [USDB {song.song_id}]"
+        directory = self.root / artist / title
         # Never follow an existing artist/song symlink outside the selected root.
         if directory.resolve().is_relative_to(self.root) is False:
             raise ValueError("Library target escapes the configured root")

@@ -26,6 +26,9 @@ class OperationCancelled(Exception):
     pass
 
 
+_TXT_LOCK = threading.Lock()
+
+
 class Gateway:
     def __init__(self, credentials: Credentials, provider: RememberedCredentials) -> None:
         self.credentials = credentials
@@ -66,9 +69,15 @@ class Gateway:
             return filter_video_results(enriched), len(entries) == 100
 
     def txt(self, song_id: int, cancel: threading.Event) -> ParsedTxt:
-        with self.session() as session:
-            client = TxtClient(session, pause=lambda seconds: self.pause(cancel, seconds))
-            return parse_txt(client.retrieve_text(song_id))
+        while not _TXT_LOCK.acquire(timeout=0.1):
+            self.pause(cancel, 0)
+        try:
+            self.pause(cancel, 0)
+            with self.session() as session:
+                client = TxtClient(session, pause=lambda seconds: self.pause(cancel, seconds))
+                return parse_txt(client.retrieve_text(song_id))
+        finally:
+            _TXT_LOCK.release()
 
     def cover(self, song_id: int, target: Path, cancel: threading.Event) -> None:
         target.write_bytes(self.cover_bytes(song_id, cancel))

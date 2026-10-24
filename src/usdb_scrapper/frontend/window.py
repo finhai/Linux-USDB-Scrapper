@@ -6,8 +6,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -16,6 +14,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QSpinBox,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -45,7 +44,9 @@ SORTS = (
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, controller: ApplicationController | None = None) -> None:
+    def __init__(
+        self, controller: ApplicationController | None = None, *, restore_login: bool = True
+    ) -> None:
         super().__init__()
         self.controller = controller or ApplicationController()
         self.setWindowTitle("USDB Scrapper")
@@ -54,6 +55,7 @@ class MainWindow(QMainWindow):
         self.resize(1100, 720)
         self._songs: list[SongEntry] = []
         self._jobs: tuple[DownloadItem, ...] = ()
+        self._adding: set[int] = set()
         self._busy = False
         self._more = False
         self._page_received = False
@@ -62,23 +64,30 @@ class MainWindow(QMainWindow):
         self._sort_field = self.controller.settings.sort_field
         self._direction = self.controller.settings.sort_direction
         self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
+        self.pages = QStackedWidget()
+        self.setCentralWidget(self.pages)
         self._build_search()
         self._build_downloads()
         self._build_settings()
         self._build_login()
+        self.pages.addWidget(self.tabs)
+        self.pages.setCurrentWidget(self.login_page)
         self.controller.results.connect(self._results)
         self.controller.cover_ready.connect(self._cover_ready)
         self.controller.downloads.connect(self._downloads)
-        self.controller.message.connect(self.statusBar().showMessage)
+        self.controller.enqueue_result.connect(self._enqueue_result)
+        self.controller.message.connect(self._message)
         self.controller.busy.connect(self._set_busy)
         self.controller.login_required.connect(self._show_login)
         self.controller.login_complete.connect(self._login_complete)
         self.controller.stopped.connect(self._on_stopped)
         self.controller.settings_changed.connect(self._settings_changed)
-        self.statusBar().showMessage(
-            self.controller.startup_message or "Ready — sign in when you search."
-        )
+        self.statusBar().showMessage(self.controller.startup_message or "Sign in to USDB to begin.")
+
+        if restore_login:
+            self.login_button.setEnabled(False)
+            self.login_status.setText("Checking saved login…")
+            QTimer.singleShot(0, self.controller.restore_login)
 
     @staticmethod
     def _table(headers: list[str]) -> QTableWidget:
@@ -121,7 +130,9 @@ class MainWindow(QMainWindow):
         layout.addLayout(row)
         self.search_status = QLabel("Results include only songs with a supported YouTube link.")
         layout.addWidget(self.search_status)
-        self.results_table = self._table(["Cover", "ID", "Artist", "Title", "Language", "Year"])
+        self.results_table = self._table(
+            ["Cover", "ID", "Artist", "Title", "Language", "Year", "Download status"]
+        )
         self.results_table.setColumnWidth(0, 90)
         self.results_table.setColumnWidth(1, 80)
         self.results_table.setColumnWidth(2, 240)
@@ -136,10 +147,15 @@ class MainWindow(QMainWindow):
         self.download_button = QPushButton("Add to queue")
         self.download_button.setObjectName("primary")
         self.download_button.clicked.connect(self._enqueue)
+        self.download_button.setEnabled(False)
+        self.results_table.itemSelectionChanged.connect(self._refresh_queue_status)
         actions.addWidget(self.more_button)
         actions.addStretch()
         actions.addWidget(self.download_button)
         layout.addLayout(actions)
+        self.queue_feedback = QLabel("Select songs to add to the download queue.")
+        self.queue_feedback.setWordWrap(True)
+        layout.addWidget(self.queue_feedback)
         self.tabs.addTab(page, "Search")
 
     def _select_sort(self, index: int) -> None:
@@ -191,6 +207,7 @@ class MainWindow(QMainWindow):
             self._songs.append(song)
             self._set_cover(self.results_table, row, song.song_id)
         self.more_button.setEnabled(more and not self._busy)
+        self._refresh_queue_status()
 
     def _set_cover(self, table: QTableWidget, row: int, song_id: int) -> None:
         cell = table.item(row, 0)
@@ -229,13 +246,51 @@ class MainWindow(QMainWindow):
         ):
             self.controller.load_more()
 
+    def _refresh_queue_status(self) -> None:
+        states = {job.song.song_id: job.state.value for job in self._jobs}
+        for row, song in enumerate(self._songs):
+            state = states.get(song.song_id, "Adding…" if song.song_id in self._adding else "")
+            cell = self.results_table.item(row, 6)
+            if cell is None:
+                cell = QTableWidgetItem()
+                self.results_table.setItem(row, 6, cell)
+            cell.setText(state.capitalize())
+            cell.setForeground(QColor("#72dfc0"))
+        rows = {index.row() for index in self.results_table.selectedIndexes()}
+        available = sum(
+            1
+            for row in rows
+            if row < len(self._songs)
+            and self._songs[row].song_id not in states
+            and self._songs[row].song_id not in self._adding
+        )
+        self.download_button.setEnabled(available > 0)
+        self.download_button.setText(
+            f"Add {available} to queue"
+            if available
+            else "Adding…"
+            if self._adding
+            else "Already in Downloads"
+            if rows
+            else "Add to queue"
+        )
+
     def _enqueue(self) -> None:
         rows = sorted({index.row() for index in self.results_table.selectedIndexes()})
-        self.controller.enqueue([self._songs[row] for row in rows])
-        if rows:
-            self.statusBar().showMessage(
-                f"Added {len(rows)} selected songs. Open Downloads to start the queue."
-            )
+        known = {job.song.song_id for job in self._jobs} | self._adding
+        songs = [self._songs[row] for row in rows if self._songs[row].song_id not in known]
+        if not songs:
+            return
+        self._adding.update(song.song_id for song in songs)
+        self.queue_feedback.setText(f"Adding {len(songs)} to queue…")
+        self._refresh_queue_status()
+        self.controller.enqueue(songs)
+
+    def _enqueue_result(self, requested: list[int], message: str) -> None:
+        self._adding.difference_update(requested)
+        self.queue_feedback.setText(message)
+        self.statusBar().showMessage(message)
+        self._refresh_queue_status()
 
     def _build_downloads(self) -> None:
         page = QWidget()
@@ -270,6 +325,8 @@ class MainWindow(QMainWindow):
             if i.row() < len(self._jobs)
         }
         self._jobs = jobs
+        self.tabs.setTabText(1, f"Downloads ({len(jobs)})")
+        self._refresh_queue_status()
         self.start_button.setEnabled(any(job.state is DownloadState.QUEUED for job in jobs))
         self.downloads_table.setRowCount(len(jobs))
         for row, item in enumerate(jobs):
@@ -326,9 +383,6 @@ class MainWindow(QMainWindow):
         self.default_direction.addItems(["asc", "desc"])
         self.default_direction.setCurrentText(self._direction)
         form.addRow("Default direction", self.default_direction)
-        self.remember = QCheckBox("Use native keyring to remember credentials")
-        self.remember.setChecked(self.controller.settings.remember)
-        form.addRow(self.remember)
         save = QPushButton("Save settings")
         save.clicked.connect(self._save_settings)
         form.addRow(save)
@@ -336,7 +390,7 @@ class MainWindow(QMainWindow):
         forget.clicked.connect(self.controller.forget_credentials)
         form.addRow(forget)
         note = QLabel(
-            "Downloads require yt-dlp, FFmpeg and ffprobe on PATH.\n"
+            "Release packages include the media download tools.\n"
             "TXT export uses VERSION 1.0.0 with AUDIO headers and original timing."
         )
         note.setWordWrap(True)
@@ -352,8 +406,6 @@ class MainWindow(QMainWindow):
         self.concurrency.setValue(settings.concurrency)
         self.default_sort.setCurrentIndex(self.default_sort.findData(settings.sort_field))
         self.default_direction.setCurrentText(settings.sort_direction)
-        self.remember.setChecked(settings.remember)
-        self.login_remember.setChecked(settings.remember)
 
     def _choose_root(self) -> None:
         selected = QFileDialog.getExistingDirectory(
@@ -368,36 +420,67 @@ class MainWindow(QMainWindow):
             self.concurrency.value(),
             str(self.default_sort.currentData()),
             self.default_direction.currentText(),
-            self.remember.isChecked(),
+            self.controller.settings.remember,
         )
 
     def _build_login(self) -> None:
-        self.login_dialog = QDialog(self)
-        self.login_dialog.setWindowTitle("Sign in to USDB")
-        form = QFormLayout(self.login_dialog)
+        self.login_page = QWidget()
+        layout = QVBoxLayout(self.login_page)
+        layout.addStretch()
+        card = QWidget()
+        card.setMaximumWidth(440)
+        form = QFormLayout(card)
+        heading = QLabel("Welcome to USDB Scrapper")
+        heading.setStyleSheet("font-size: 24px; font-weight: bold; color: #d4b0ff;")
+        form.addRow(heading)
+        description = QLabel("Sign in with your USDB account to search and download songs.")
+        description.setWordWrap(True)
+        form.addRow(description)
         self.username = QLineEdit()
+        self.username.setPlaceholderText("USDB username")
         self.password = QLineEdit()
+        self.password.setPlaceholderText("Password")
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.login_remember = QCheckBox("Remember in native keyring")
-        self.login_remember.setChecked(self.controller.settings.remember)
+        self.password.returnPressed.connect(self._login)
         form.addRow("Username", self.username)
         form.addRow("Password", self.password)
+        self.login_remember = QCheckBox("Remember me for 30 days")
+        self.login_remember.setChecked(self.controller.settings.remember)
         form.addRow(self.login_remember)
-        self.login_buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        self.login_buttons.accepted.connect(self._login)
-        self.login_buttons.rejected.connect(self.login_dialog.reject)
-        self.login_dialog.rejected.connect(self.password.clear)
-        form.addRow(self.login_buttons)
+        self.login_status = QLabel("Sign in to your USDB account.")
+        self.login_status.setWordWrap(True)
+        form.addRow(self.login_status)
+        self.login_button = QPushButton("Sign in")
+        self.login_button.setObjectName("primary")
+        self.login_button.clicked.connect(self._login)
+        form.addRow(self.login_button)
+        layout.addWidget(card, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addStretch()
+        self.pages.addWidget(self.login_page)
+
+    def _message(self, message: str) -> None:
+        self.statusBar().showMessage(message)
+        if self.pages.currentWidget() is self.login_page:
+            self.login_status.setText(message)
 
     def _show_login(self) -> None:
         if not self._closing:
-            self.login_buttons.setEnabled(True)
-            self.login_dialog.open()
+            self.login_button.setEnabled(True)
+            self.login_button.setText("Sign in")
+            self.pages.setCurrentWidget(self.login_page)
+            if self.login_status.text() == "Checking saved login…":
+                self.login_status.setText("Sign in to your USDB account.")
+            self.password.setFocus()
 
     def _login(self) -> None:
-        self.login_buttons.setEnabled(False)
+        if not self.login_button.isEnabled():
+            return
+        if not self.username.text().strip() or not self.password.text():
+            self.login_status.setText("Enter your username and password.")
+            return
+        self.login_button.setEnabled(False)
+        self.login_button.setText("Signing in…")
+        self.login_status.setText("Connecting to USDB…")
         self.controller.login(
             self.username.text(), self.password.text(), self.login_remember.isChecked()
         )
@@ -405,8 +488,10 @@ class MainWindow(QMainWindow):
 
     def _login_complete(self) -> None:
         self.password.clear()
-        self.login_buttons.setEnabled(True)
-        self.login_dialog.accept()
+        self.login_button.setEnabled(True)
+        self.login_button.setText("Sign in")
+        self.pages.setCurrentWidget(self.tabs)
+        self.statusBar().showMessage("Signed in. Search for songs to get started.")
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._stopped:
