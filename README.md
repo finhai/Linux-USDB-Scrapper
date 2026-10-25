@@ -1,45 +1,94 @@
-# Linux USDB Scrapper
+# USDB Scrapper
 
-A Python + PySide6 desktop application for Linux and Windows, planned in
-[Trello](https://trello.com/b/KnffFXKA/usdb-scrapper-linux).
+A purple-themed desktop app for finding USDB songs and building an UltraStar
+library on Linux and Windows.
 
-The desktop now provides deferred login, paginated search, a download queue with
-cancel/retry, and persistent settings. Downloads create TXT/MP3/MP4/JPG bundles
-under normalized Artist/Song directories, with restart recovery. Credentials use
-the native OS keyring when available.
+## Features
 
-See [install and first run](docs/install.md) for launch commands and the remaining
-release-validation limits. This is a development build, not yet a verified
-cross-platform release.
+- Search by artist, title, or both, with sorting and automatic pagination.
+- See results as soon as the listing arrives; cover previews and comment-link
+  checks load in the background. Songs are never hidden just because a comment
+  link has not been found.
+- Repeat searches use a bounded, 15-minute in-memory cache. **Refresh results**
+  bypasses cached search/source information. Changing a search cancels its old work.
+- Add songs to a queue, then explicitly start the batch. Cancel and retry individual
+  downloads; see clear queue confirmation and stage-specific errors.
+- Download TXT, MP3, MP4 and JPG files into readable `Artist/Title/` folders.
+  Filenames and TXT media references use the song title.
+- Export player-compatible `#VERSION:1.0.0` and `#AUDIO`, preserving source timing
+  and notes. Downloads support YouTube audio/video source metadata.
+- Optionally remember login in the operating system's native keyring for **30 days**.
+  Automatic sign-in does not extend that period.
 
-## Start developing
+## Download and run
 
-Install Git and [uv](https://docs.astral.sh/uv/getting-started/installation/)
-(version 0.13.1 used in CI), then from this checkout run:
+Version **1.0.0 is being prepared for release**. Test builds are available from
+[Desktop packages in GitHub Actions](https://github.com/finhai/Linux-USDB-Scrapper/actions/workflows/desktop.yml).
+Published versions will appear on the [Releases page](https://github.com/finhai/Linux-USDB-Scrapper/releases).
+
+**Linux:** make the `.AppImage` executable and open it. If FUSE is unavailable,
+run it with `--appimage-extract-and-run`.
+
+**Windows:** extract the portable ZIP, then launch `USDB-Scrapper.exe` from its
+`USDB-Scrapper` folder. Keep `_internal`, `tools` and the other bundled files together.
+The executable is unsigned.
+
+Release packages include Python, Qt, yt-dlp, FFmpeg and ffprobe. A USDB account,
+internet connection and graphical desktop are required. Remembering login also
+requires a working native keyring. See [installation and troubleshooting](docs/install.md).
+
+## First use
+
+1. Sign in with your USDB account. Choose **Remember me for 30 days** if desired.
+2. In **Settings**, choose your song-library directory, such as `/mnt/Storage/Songs`.
+3. Search for an artist or title. Scroll down to fetch further results automatically.
+   The status changes to **All results loaded** at the end. A failed page exposes
+   **Retry loading results** without discarding the rows already shown.
+4. Select songs and choose **Add to queue**. Open **Downloads**, then choose
+   **Start queued downloads** when ready.
+5. Add the library directory to UltraStar Deluxe's song directories.
+
+A **YouTube link found** status means a link was found in USDB comments, not that
+YouTube playback has been verified. **Check on download** is not an exclusion:
+TXT metadata may supply a usable source. Actual media availability is established
+when downloading. Private, removed or restricted media can still fail.
+
+## Development
+
+Install Git and [uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
 
 ```sh
 uv sync --locked
+uv run usdb-scrapper
 ```
 
-This installs the pinned Python and locked development/runtime dependencies.
-Run the desktop shell with `uv run usdb-scrapper` and check the installed version
-with `uv run usdb-scrapper --version`.
-Linux needs a working desktop session and Qt system libraries; minimal systems
-may need libEGL, libGL, and xkbcommon. CI runs a headless Qt smoke test.
+Quality checks and Python package builds:
 
 ```sh
 uv run python scripts/check.py
 uv build
 ```
 
-The first command runs formatting, lint, strict type checks, and tests.
-The second builds a Python wheel and source distribution, not a standalone desktop installer.
+Native release packages must be built on their target operating system:
+
+```sh
+uv run python scripts/build_desktop.py
+uv run python scripts/check_package.py
+uv run python scripts/package_release.py
+```
 
 See [contributing](CONTRIBUTING.md), [architecture](docs/architecture.md),
-[release workflow](docs/releases.md), and the [Trello snapshot](docs/backlog.md).
+[release workflow](docs/releases.md), and the
+[Trello roadmap](https://trello.com/b/KnffFXKA/usdb-scrapper-linux).
 
-## Validation status
+## Validation and limitations
 
-The real-site login, pagination, TXT retrieval and draft-v2 round trip have been
-verified. A real four-file bundle and offline desktop workflow now pass too.
-Clean-platform packaging and UltraStar playback acceptance remain open.
+Automated checks cover Linux and Windows, desktop interactions, native packaging,
+and Linux startup in Debian/Fedora containers. Live USDB checks cover login,
+pagination, TXT retrieval and media downloads; playback has been exercised during
+user testing. Automated startup checks do not replace interactive Windows acceptance.
+
+The application supports YouTube media sources, not every external source on USDB.
+Site changes can require updates. Song replacement is staged with crash recovery;
+it is not a guarantee against power loss. Different versions with the same artist
+and title share a destination name: a queue rejects two jobs targeting that same folder.

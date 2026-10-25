@@ -59,6 +59,7 @@ class MainWindow(QMainWindow):
         self._busy = False
         self._more = False
         self._page_received = False
+        self._page_failed = False
         self._closing = False
         self._stopped = False
         self._sort_field = self.controller.settings.sort_field
@@ -73,6 +74,9 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.tabs)
         self.pages.setCurrentWidget(self.login_page)
         self.controller.results.connect(self._results)
+        self.controller.search_reset.connect(self._reset_search)
+        self.controller.search_failed.connect(self._search_failed)
+        self.controller.source_checked.connect(self._source_checked)
         self.controller.cover_ready.connect(self._cover_ready)
         self.controller.downloads.connect(self._downloads)
         self.controller.enqueue_result.connect(self._enqueue_result)
@@ -128,20 +132,35 @@ class MainWindow(QMainWindow):
         for widget in (self.artist, self.title, self.sort, self.sort_direction, self.search_button):
             row.addWidget(widget)
         layout.addLayout(row)
-        self.search_status = QLabel("Results include only songs with a supported YouTube link.")
+        self.search_status = QLabel(
+            "Search by artist, title, or both. Media sources are checked separately."
+        )
         layout.addWidget(self.search_status)
         self.results_table = self._table(
-            ["Cover", "ID", "Artist", "Title", "Language", "Year", "Download status"]
+            [
+                "Cover",
+                "ID",
+                "Artist",
+                "Title",
+                "Language",
+                "Year",
+                "Download status",
+                "Source check",
+            ]
         )
         self.results_table.setColumnWidth(0, 90)
-        self.results_table.setColumnWidth(1, 80)
-        self.results_table.setColumnWidth(2, 240)
-        self.results_table.setColumnWidth(3, 350)
+        self.results_table.setColumnWidth(1, 60)
+        self.results_table.setColumnWidth(2, 190)
+        self.results_table.setColumnWidth(3, 230)
+        self.results_table.setColumnWidth(4, 110)
+        self.results_table.setColumnWidth(5, 60)
+        self.results_table.setColumnWidth(6, 145)
         bar = self.results_table.verticalScrollBar()
         bar.valueChanged.connect(self._scroll)
         layout.addWidget(self.results_table)
         actions = QHBoxLayout()
-        self.more_button = QPushButton("Load more")
+        self.more_button = QPushButton("Retry loading results")
+        self.more_button.hide()
         self.more_button.setEnabled(False)
         self.more_button.clicked.connect(self.controller.load_more)
         self.download_button = QPushButton("Add to queue")
@@ -150,6 +169,13 @@ class MainWindow(QMainWindow):
         self.download_button.setEnabled(False)
         self.results_table.itemSelectionChanged.connect(self._refresh_queue_status)
         actions.addWidget(self.more_button)
+        self.refresh_button = QPushButton("Refresh results")
+        self.refresh_button.clicked.connect(lambda: self._search(refresh=True))
+        actions.addWidget(self.refresh_button)
+        self.cancel_search_button = QPushButton("Cancel search")
+        self.cancel_search_button.clicked.connect(self.controller.cancel_search)
+        self.cancel_search_button.setEnabled(False)
+        actions.addWidget(self.cancel_search_button)
         actions.addStretch()
         actions.addWidget(self.download_button)
         layout.addLayout(actions)
@@ -168,24 +194,58 @@ class MainWindow(QMainWindow):
         if self.artist.text().strip() or self.title.text().strip():
             self._search()
 
-    def _search(self) -> None:
-        if not self._busy:
-            self._songs.clear()
-            self.results_table.setRowCount(0)
-            self.controller.search(
-                self.artist.text(), self.title.text(), self._sort_field, self._direction
-            )
+    def _search(self, *, refresh: bool = False) -> None:
+        if not self.artist.text().strip() and not self.title.text().strip():
+            self.search_status.setText("Enter an artist or song title.")
+            return
+        self._busy = True
+        self.cancel_search_button.setEnabled(True)
+        self.search_status.setText("Starting search…")
+        self.controller.search(
+            self.artist.text(),
+            self.title.text(),
+            self._sort_field,
+            self._direction,
+            refresh=refresh,
+        )
+
+    def _reset_search(self) -> None:
+        self._songs.clear()
+        self.results_table.setRowCount(0)
+        self._more = False
+        self._page_failed = False
+        self.more_button.hide()
+        self._refresh_queue_status()
+
+    def _search_failed(self, message: str) -> None:
+        self._page_failed = True
+        self.search_status.setText(message)
+        self.more_button.setEnabled(True)
+        self.more_button.show()
+
+    def _source_checked(self, song_id: int, status: str) -> None:
+        for row, song in enumerate(self._songs):
+            if song.song_id == song_id:
+                cell = self.results_table.item(row, 7)
+                if cell is not None:
+                    cell.setText(status)
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
-        self.search_button.setEnabled(not busy)
-        self.sort.setEnabled(not busy)
-        self.more_button.setEnabled(self._more and not busy)
-        self.search_status.setText(
-            "Searching and checking YouTube links…" if busy else f"{len(self._songs)} songs loaded"
-        )
+        self.cancel_search_button.setEnabled(busy or bool(self._songs))
+        if busy:
+            self._page_failed = False
+            self.more_button.hide()
+            self.search_status.setText("Loading more songs…" if self._songs else "Searching…")
+        elif not self._page_failed:
+            self.search_status.setText(
+                f"{len(self._songs)} songs loaded · Scroll down for more"
+                if self._more
+                else f"All results loaded ({len(self._songs)})"
+            )
         if (
             not busy
+            and not self._page_failed
             and self._page_received
             and self._more
             and self.results_table.verticalScrollBar().maximum() == 0
@@ -204,9 +264,14 @@ class MainWindow(QMainWindow):
                 ("♫", song.song_id, song.artist, song.title, song.language or "", song.year or "")
             ):
                 self.results_table.setItem(row, column, QTableWidgetItem(str(value)))
+            source = QTableWidgetItem("Not checked")
+            source.setToolTip(
+                "Comment links are checked in the background. TXT media metadata and actual "
+                "download availability are verified when downloading."
+            )
+            self.results_table.setItem(row, 7, source)
             self._songs.append(song)
             self._set_cover(self.results_table, row, song.song_id)
-        self.more_button.setEnabled(more and not self._busy)
         self._refresh_queue_status()
 
     def _set_cover(self, table: QTableWidget, row: int, song_id: int) -> None:
@@ -241,6 +306,7 @@ class MainWindow(QMainWindow):
     def _scroll(self, value: int) -> None:
         if (
             self._more
+            and not self._page_failed
             and not self._busy
             and value >= self.results_table.verticalScrollBar().maximum()
         ):

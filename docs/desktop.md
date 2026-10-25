@@ -7,11 +7,21 @@ is fixed: automatic login never extends it. Expired entries, old entries without
 a timestamp, unavailable keyrings, and failed authentication return to the login
 page. Without Remember me, credentials remain in memory for this run only.
 
-Search loads 100 source rows at a time, enriches details with one-second spacing,
-and displays only rows with supported YouTube links. Scrolling to the bottom
-loads the next page; Load more is available too. Changing the sort field resets
-to ascending; selecting the same field toggles. Searching/enrichment runs in
-background workers and may take over a minute for a full source page.
+Search displays each 100-row listing immediately. It does not wait for detail
+pages or hide entries without comment links. Source checks and cover previews run
+in the background; a comment link is a hint, not verified media availability.
+Scrolling loads subsequent pages automatically. There is no normal Load more
+button: the UI reports loading/end state and provides Retry loading results on
+failure. Failed pages retain their offset and existing rows.
+
+Changing the query or sort cancels previous search/background work. Cancellation
+joins cooperative workers; an in-flight HTTP request can take up to its network
+timeout to stop. Stale generations never publish result rows. Cancel search keeps
+already loaded rows. Media downloads are independent and continue.
+
+A bounded in-memory cache stores 32 search pages and 1,000 source checks for 15
+minutes. Reads do not extend the lifetime. Refresh results clears these caches
+and cover previews, then repeats the query. No credentials or raw HTML are cached.
 
 Selected results are added to a waiting queue without starting transfers. Press
 Start queued downloads in the Downloads tab to start the current batch. Later

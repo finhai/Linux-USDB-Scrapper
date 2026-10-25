@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Signal
 
 from usdb_scrapper.controllers.gateway import Gateway
 from usdb_scrapper.controllers.runtime import Runtime, blocking
+from usdb_scrapper.controllers.search_cache import SearchCache
 from usdb_scrapper.credential_manager import Credentials, CredentialStore, CredentialStoreError
 from usdb_scrapper.credential_manager.provider import RememberedCredentials
 from usdb_scrapper.credential_manager.store import REMEMBER_SECONDS
@@ -34,6 +35,9 @@ logger = logging.getLogger(__name__)
 class ApplicationController(QObject):
     enqueue_result = Signal(object, str)
     results = Signal(object, bool)
+    search_reset = Signal()
+    search_failed = Signal(str)
+    source_checked = Signal(int, str)
     cover_ready = Signal(int, bytes)
     downloads = Signal(object, object)
     message = Signal(str)
@@ -66,6 +70,13 @@ class ApplicationController(QObject):
         self._pending_search = False
         self._closing = False
         self._search_task: asyncio.Task[None] | None = None
+        self._generation = 0
+        self._background: set[asyncio.Task[None]] = set()
+        self._source_gate = asyncio.Lock()
+        self._pages: SearchCache[tuple[SearchQuery, int], tuple[tuple[SongEntry, ...], bool]] = (
+            SearchCache(32)
+        )
+        self._sources: SearchCache[int, str] = SearchCache(1000)
         self._poll_task: asyncio.Task[None] | None = None
         self.runtime.submit(self._initialize())
 
@@ -165,14 +176,27 @@ class ApplicationController(QObject):
             logger.warning("Login failed")
             self.login_required.emit()
 
-    def search(self, artist: str, title: str, field: str, direction: str) -> None:
-        self.runtime.submit(self._search(artist, title, field, direction))
+    def search(
+        self, artist: str, title: str, field: str, direction: str, *, refresh: bool = False
+    ) -> None:
+        self.runtime.submit(self._search(artist, title, field, direction, refresh=refresh))
 
-    async def _search(self, artist: str, title: str, field: str, direction: str) -> None:
-        if self._searching or self._closing:
+    async def _stop_search_tasks(self) -> None:
+        tasks = set(self._background)
+        if self._search_task is not None and self._search_task is not asyncio.current_task():
+            tasks.add(self._search_task)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _search(
+        self, artist: str, title: str, field: str, direction: str, *, refresh: bool = False
+    ) -> None:
+        if self._closing:
             return
         try:
-            self._query = SearchQuery(
+            query = SearchQuery(
                 normalize_search_input(artist),
                 normalize_search_input(title),
                 SortState(SortField(field), SortDirection(direction)),
@@ -180,9 +204,38 @@ class ApplicationController(QObject):
         except (ValueError, TypeError):
             self.message.emit("Enter an artist or title and select a valid sort order.")
             return
+        self._generation += 1
+        generation = self._generation
+        self._searching = True  # Block pagination while the previous query is stopping.
+        await self._stop_search_tasks()
+        if generation != self._generation or self._closing:
+            return
+        if refresh:
+            self._pages.clear()
+            self._sources.clear()
+            self._covers.clear()
+        self._query = query
+        self._searching = False
         self._offset, self._more = 0, True
         self._seen.clear()
+        self.search_reset.emit()
         await self._load_page()
+
+    def cancel_search(self) -> None:
+        self.runtime.submit(self._cancel_search())
+
+    async def _cancel_search(self) -> None:
+        self._generation += 1
+        generation = self._generation
+        self._searching = True  # Block pagination while the previous query is stopping.
+        await self._stop_search_tasks()
+        if generation == self._generation:
+            self._searching = False
+            self.busy.emit(False)
+            if self._more:
+                self.search_failed.emit("Search cancelled. Retry to continue loading.")
+            else:
+                self.message.emit("Background source checks cancelled.")
 
     def load_more(self) -> None:
         self.runtime.submit(self._load_page())
@@ -190,6 +243,7 @@ class ApplicationController(QObject):
     async def _load_page(self) -> None:
         if self._searching or not self._more or self._query is None or self._closing:
             return
+        generation = self._generation
         self._searching = True
         self._search_task = asyncio.current_task()
         self.busy.emit(True)
@@ -200,19 +254,28 @@ class ApplicationController(QObject):
                 return
             query, offset = self._query, self._offset
             if offset >= 10000:
-                self._more = False
                 raise ValueError("Search reached the page limit")
-            entries, more = await blocking(
-                lambda cancel: gateway.search_page(query, offset, cancel)
-            )
+            cached = self._pages.get((query, offset))
+            from_cache = cached is not None
+            if cached is None:
+                cached = await blocking(lambda cancel: gateway.search_page(query, offset, cancel))
+            if generation != self._generation:
+                return
+            entries, more = cached
             if self._seen.intersection(entry.song_id for entry in entries):
                 raise ValueError("Search pages overlapped")
+            if not from_cache:
+                self._pages.put((query, offset), cached)
             self._seen.update(entry.song_id for entry in entries)
             self._offset += 100
             self._more = more
             self.results.emit(entries, more)
-            self.runtime.submit(self._load_covers(entries))
-            self.message.emit(f"Loaded {len(self._seen)} matching songs with YouTube links.")
+            task = asyncio.create_task(self._enrich(entries, gateway, generation))
+            self._background.add(task)
+            task.add_done_callback(self._background.discard)
+            self.message.emit(
+                f"Loaded {len(self._seen)} songs. Source checks run in the background."
+            )
         except AuthenticationError:
             self._credentials = None
             self._pending_search = True
@@ -220,12 +283,47 @@ class ApplicationController(QObject):
         except asyncio.CancelledError:
             raise
         except Exception:
-            self.message.emit("Search failed. Check your connection and retry the search.")
-            logger.warning("Search failed")
+            if generation == self._generation:
+                self.search_failed.emit("Could not load results. Retry or change your search.")
+                logger.warning("Search failed")
         finally:
-            self._searching = False
-            self._search_task = None
-            self.busy.emit(False)
+            if generation == self._generation:
+                self._searching = False
+                self._search_task = None
+                self.busy.emit(False)
+
+    async def _enrich(
+        self, entries: tuple[SongEntry, ...], gateway: Gateway, generation: int
+    ) -> None:
+        async def sources() -> None:
+            async with self._source_gate:
+                pending = []
+                for song in entries:
+                    status = self._sources.get(song.song_id)
+                    if status is None:
+                        pending.append(song)
+                    elif generation == self._generation:
+                        self.source_checked.emit(song.song_id, status)
+                loop = asyncio.get_running_loop()
+
+                def deliver(song_id: int, status: str) -> None:
+                    if generation == self._generation:
+                        self._sources.put(song_id, status)
+                        self.source_checked.emit(song_id, status)
+
+                def report(song_id: int, status: str) -> None:
+                    loop.call_soon_threadsafe(deliver, song_id, status)
+
+                if pending:
+                    try:
+                        await blocking(
+                            lambda cancel: gateway.check_sources(tuple(pending), cancel, report)
+                        )
+                    except Exception:
+                        for song in pending:
+                            report(song.song_id, "Check on download")
+
+        await asyncio.gather(sources(), self._load_covers(entries))
 
     async def _load_covers(self, songs: tuple[SongEntry, ...]) -> None:
         for song in songs:
@@ -366,6 +464,7 @@ class ApplicationController(QObject):
     async def _shutdown(self) -> None:
         self._closing = True
         await self.runtime.cancel_others()
+        await self._stop_search_tasks()
         if self._queue:
             await self._queue.cancel_all()
             await self._queue.close()

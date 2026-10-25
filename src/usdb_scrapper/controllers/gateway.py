@@ -1,7 +1,7 @@
 """Worker-owned USDB operations composed from public backend APIs."""
 
 import threading
-from dataclasses import replace
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 
@@ -17,7 +17,6 @@ from usdb_scrapper.usdb_client import (
     SearchQuery,
     TxtClient,
     UsdbSession,
-    filter_video_results,
     parse_listing,
 )
 
@@ -60,13 +59,25 @@ class Gateway:
             entries = parse_listing(session.post_html("/?link=list", fields))
             if len(entries) > 100:
                 raise ValueError("Search page exceeded its requested size")
-            enriched = []
+            return entries, len(entries) == 100
+
+    def check_sources(
+        self,
+        songs: tuple[SongEntry, ...],
+        cancel: threading.Event,
+        report: Callable[[int, str], None],
+    ) -> None:
+        with self.session() as session:
             details = DetailClient(session)
-            for entry in entries:
+            for song in songs:
                 self.pause(cancel, 1.0)
-                links = details.fetch(entry.song_id).youtube_urls
-                enriched.append(replace(entry, youtube_url=links[0] if links else None))
-            return filter_video_results(enriched), len(entries) == 100
+                try:
+                    links = details.fetch(song.song_id).youtube_urls
+                    status = "YouTube link found" if links else "Check on download"
+                except Exception:
+                    self.pause(cancel, 0)
+                    status = "Check on download"
+                report(song.song_id, status)
 
     def txt(self, song_id: int, cancel: threading.Event) -> ParsedTxt:
         while not _TXT_LOCK.acquire(timeout=0.1):

@@ -2,6 +2,10 @@
 
 ## 1.0.0 — release candidate build
 
+- Display search listings immediately, with background covers/source hints and no early exclusions.
+- Cache search metadata for 15 minutes; add Refresh and replacement/cancellation of searches.
+- Load pages automatically with explicit completion/error states and retry without duplicates.
+
 - Add a startup login page and opt-in native-keyring login with fixed 30-day expiry.
 - Build Linux AppImage and Windows portable EXE packages with FFmpeg/ffprobe.
 - Keep coordination locks outside the music library; use title-only song folders.

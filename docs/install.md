@@ -12,9 +12,9 @@ For a fresh clone, install uv, then run `uv sync --locked` and
 `uv run usdb-scrapper`. Python and dependencies are locked by the repository.
 On Linux, Qt also requires host EGL/OpenGL and xkbcommon libraries.
 
-The app opens on Search. Enter an artist and/or title. It uses your native-keyring
-credentials if available; otherwise it asks for login. Select one or more songs
-and choose Download selected. Check Settings before downloading: the default
+The app starts with login, or verifies a remembered login that is under 30 days old.
+Enter an artist and/or title. Select songs and choose Add to queue, then explicitly
+start them from Downloads. Check Settings before downloading: the default
 library root is `~/Music/UltraStar`. Download states and cancellation/retry are
 available in Downloads. Settings changes apply without restarting.
 
@@ -32,7 +32,8 @@ Run `dist/USDB-Scrapper/USDB-Scrapper` (Linux) or
 version. Linux archives must preserve symlinks; use the supplied tar.gz format.
 The packaging workflow builds Linux and Windows candidates, not signed releases.
 
-FFmpeg and ffprobe are required for media. Install both through your OS package
+Release AppImage/ZIP files include FFmpeg and ffprobe. When running from source,
+install both through your OS package
 manager, put them on PATH, place them in a `tools` folder next to the packaged
 executable, or set `USDB_FFMPEG_DIR` to their directory. On this development
 checkout only, a locally extracted Ubuntu FFmpeg package exists under
@@ -54,9 +55,8 @@ and AAC audio rather than assuming every MP4 codec is supported by players.
 Current evidence: offline Qt workflow and process-crash recovery pass. A live
 Song 3289 bundle retrieved all four files using remembered credentials; media
 streams and cover image were inspected. Linux package version/media-worker checks
-pass on the development machine. Clean Windows, a second Linux distribution,
-and actual UltraStar playback still require verification. Do not label this a
-finished cross-platform release until those checks pass.
+pass on the development machine. Native Windows packaging and Linux startup checks on Debian and Fedora pass in CI.
+Interactive Windows login/download/playback remains a separate acceptance check.
 
 See [desktop behavior](desktop.md), [transaction limitations](library-recovery.md),
 and [player export](player-export.md) for implementation details.
