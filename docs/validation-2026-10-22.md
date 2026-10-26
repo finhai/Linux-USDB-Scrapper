@@ -1,0 +1,50 @@
+# Validation record — 2026-10-22
+
+- 493 offline tests pass, including the real Qt/controller workflow with synthetic
+  external services, cancellation/retry, native-keyring fallback, session recovery,
+  and process-kill recovery. Ruff and strict mypy pass; wheel/source builds pass.
+- Saved Linux credentials were loaded and verified without prompting.
+- A real desktop controller/view flow searched ABBA + Dancing Queen, selected
+  Song 3289, queued it and completed all four files. The initial restricted-codec
+  attempt failed cleanly; a repeat passed. This was not diagnosed as a deterministic
+  application bug and is not evidence that network/media failures cannot recur.
+- ffprobe verified MP3 audio and H.264 1920x1080 + AAC video; Pillow verified JPEG.
+  Exported TXT uses VERSION 2.0.0 and local AUDIO/VIDEO/COVER, with no YouTube URL.
+  No credentials, cookies or song lyrics are included in this record or Git.
+- Local Linux PyInstaller package passes app-version, bundled yt-dlp-version,
+  and offscreen GUI startup/shutdown. A shutdown segmentation fault was corrected
+  by destroying Qt objects before interpreter teardown and waiting for the worker.
+- GitHub PR 16 initial CI passed Linux/Windows tests and both native package builds.
+  Those first package jobs only tested version output. Updated GUI smoke checks
+  and fresh distribution/container checks are tracked separately.
+- Live normalization: Dancing Queen / dancing queen return the same six IDs;
+  Dáncing Quéen, doubled internal spaces and outer spaces return no rows. Therefore
+  search normalization trims/collapses whitespace and normalizes ASCII case while
+  preserving accents and punctuation. Broad transliteration is not assumed.
+
+Per-file replacement now keeps final paths present and restores the original
+bundle after an interrupted replacement. Process-kill recovery tests pass.
+
+Remaining release acceptance: clean Windows GUI/credential/media behavior, two distinct Linux distributions,
+actual UltraStar playback (the latest 2026.10.0 player rejects v2; version 1.0.0 AUDIO-only export is now selected and implemented), and final review/merge. The project is not yet
+claimed finished or ready for a production release.
+
+
+Player-compatible export update: all 500 offline tests pass. A fresh authenticated
+Song 3289 round trip verified VERSION 1.0.0, AUDIO-only headers, unchanged BPM and
+notes, and repeat-export identity using saved credentials. UltraStar Deluxe
+2026.10.0 is installed as Flatpak, but launch failed with "Unable to allocate
+instance id" in this execution session; this is not a playback pass.
+
+Packaging CI now includes the built Linux artifact in clean Debian 12 and Fedora
+42 containers, installing only runtime libraries and checking app, media-worker,
+and offscreen GUI lifecycle. Results must pass before this acceptance is closed;
+these tests do not exercise native credential dialogs or interactive playback.
+
+Packaging workflow 39768286608 passed on 2026-10-22: Ubuntu and Windows
+package builds plus packaged GUI smoke checks, and clean Debian 12/Fedora 42
+container startup/shutdown. The first container run exposed missing libGL.so.1;
+the runtime dependency lists and install instructions now include it.
+Windows test run 39768286629 exposed intermittent post-termination lock contention.
+Recovery now allows a bounded 0.5-second acquisition grace and preserves lock-file
+identity. Local 500-test validation passes; Windows confirmation is pending.

@@ -1,18 +1,27 @@
 # Versioning and releases
 
-pyproject.toml is the single version source; the app reads installed metadata.
-Start at `0.1.0.dev0`. Use semantic versions: PATCH for fixes, MINOR for features,
-MAJOR for incompatible changes. During 0.x, breaking changes increment MINOR.
-Previews use `0.1.0rc1`; Git tags have a v prefix (for example `v0.1.0`).
+`pyproject.toml` is the version source. The first release is `v1.0.0`;
+creating binaries does not tag or publish a release automatically.
 
-1. Prepare a release branch from dev; update project version and CHANGELOG.md,
-   run `uv lock`, quality checks, and `uv build`; merge its PR into dev.
-2. Open a release PR from dev to prod and require all checks; merge with a merge
-   commit. Only release functionality actually validated on supported platforms.
-3. From updated prod, create an annotated tag matching pyproject.toml:
-   `git tag -a v0.1.0 -m "Release 0.1.0"`, then `git push origin v0.1.0`.
-4. Create a GitHub release with notes and verified distribution assets. Do not
-   relabel wheels as standalone installers. Desktop packaging is a later phase.
+Run `uv sync --locked`, `uv run python scripts/check.py`, and `uv build`.
+On each native OS, run `uv run python scripts/build_desktop.py`, then
+`uv run python scripts/check_package.py`, then `uv run python scripts/package_release.py`.
+The Desktop packages workflow performs these steps on Linux and Windows.
 
-No release tag is created for the initial scaffold. Tags are immutable; fixes
-get a new version. Dependency locks are committed, and CI uses `uv sync --locked`.
+Outputs:
+- Linux x86-64: `USDB-Scrapper-1.0.0-x86_64.AppImage`.
+- Windows x86-64: `USDB-Scrapper-1.0.0-windows-x86_64.zip`; extract the whole archive
+  and run `USDB-Scrapper/USDB-Scrapper.exe`. Keep `_internal` and `tools` beside it.
+- SHA-256 checksum files accompany the release archives.
+
+Python, Qt, yt-dlp, FFmpeg and ffprobe are included. Linux needs a graphical
+session and native keyring service to remember login. AppImage normally uses
+FUSE; `--appimage-extract-and-run` is available on systems without FUSE.
+Windows packages are unsigned and may trigger the operating system's trust prompt.
+FFmpeg archives and appimagetool are pinned and SHA-256 verified; upstream license
+files and FFmpeg source/build references are included with the package.
+
+Before publishing: require CI and packaging checks, test real login/download and
+UltraStar playback on target machines, review the release PR, then merge into
+prod and create the matching immutable `v1.0.0` tag. Attach verified artifacts to
+the GitHub release. Later fixes receive a new patch version.

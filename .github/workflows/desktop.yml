@@ -1,0 +1,70 @@
+name: Desktop packages
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [dev, prod]
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.1"
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libopengl0 libxkbcommon0
+      - run: uv sync --locked
+      - run: uv run python scripts/build_desktop.py
+      - run: uv run python scripts/check_package.py
+      - run: uv run python scripts/package_release.py
+      - if: runner.os == 'Linux'
+        run: dist/USDB-Scrapper/USDB-Scrapper --version && tar -czf dist/USDB-Scrapper-linux.tar.gz -C dist USDB-Scrapper
+      - if: runner.os == 'Windows'
+        run: dist/USDB-Scrapper/USDB-Scrapper.exe --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: USDB-Scrapper-${{ runner.os }}
+          path: |
+            dist/USDB-Scrapper-linux.tar.gz
+            dist/USDB-Scrapper/
+            dist/*.AppImage
+            dist/*windows-x86_64.zip
+            dist/*.sha256
+
+  linux-distributions:
+    needs: package
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:12-slim
+            install: apt-get update && apt-get install -y --no-install-recommends libegl1 libgl1 libopengl0 libxkbcommon0 libfontconfig1 libdbus-1-3
+          - image: fedora:42
+            install: dnf install -y libglvnd-egl libglvnd-glx libglvnd-opengl libxkbcommon fontconfig dbus-libs
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: USDB-Scrapper-Linux
+          path: package
+      - name: Run packaged GUI in clean distribution
+        env:
+          IMAGE: ${{ matrix.image }}
+          INSTALL_LIBRARIES: ${{ matrix.install }}
+        run: |
+          tar -xzf package/USDB-Scrapper-linux.tar.gz -C package
+          docker run --rm -v "$PWD/package/USDB-Scrapper:/app:ro" \
+            -e QT_QPA_PLATFORM=offscreen -e INSTALL_LIBRARIES "$IMAGE" sh -ec '
+              sh -ec "$INSTALL_LIBRARIES"
+              mkdir -p /tmp/usdb-home
+              export HOME=/tmp/usdb-home
+              /app/USDB-Scrapper --version
+              /app/USDB-Scrapper --media-worker --version
+              timeout 60 /app/USDB-Scrapper --smoke-test
+            '

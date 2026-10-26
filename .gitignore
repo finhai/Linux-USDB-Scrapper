@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local external media tools
+.tools/
+
+# Test temporary directories when system temp is unavailable
+pytest-of-*/
