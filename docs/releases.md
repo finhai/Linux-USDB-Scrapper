@@ -1,6 +1,6 @@
 # Versioning and releases
 
-`pyproject.toml` is the version source. Version 1.0.0 is prepared for release;
+`pyproject.toml` is the version source. The first release is `v1.0.0`;
 creating binaries does not tag or publish a release automatically.
 
 Run `uv sync --locked`, `uv run python scripts/check.py`, and `uv build`.

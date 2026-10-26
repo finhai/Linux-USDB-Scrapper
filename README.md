@@ -22,9 +22,14 @@ library on Linux and Windows.
 
 ## Download and run
 
-Version **1.0.0 is being prepared for release**. Test builds are available from
-[Desktop packages in GitHub Actions](https://github.com/finhai/Linux-USDB-Scrapper/actions/workflows/desktop.yml).
-Published versions will appear on the [Releases page](https://github.com/finhai/Linux-USDB-Scrapper/releases).
+Download **[USDB Scrapper 1.0.0](https://github.com/finhai/Linux-USDB-Scrapper/releases/tag/v1.0.0)**:
+
+| Platform | Download |
+| --- | --- |
+| Linux x86-64 | [AppImage](https://github.com/finhai/Linux-USDB-Scrapper/releases/download/v1.0.0/USDB-Scrapper-1.0.0-x86_64.AppImage) |
+| Windows x86-64 | [Portable ZIP with EXE](https://github.com/finhai/Linux-USDB-Scrapper/releases/download/v1.0.0/USDB-Scrapper-1.0.0-windows-x86_64.zip) |
+
+SHA-256 checksum files accompany both downloads. No Python installation is needed.
 
 **Linux:** make the `.AppImage` executable and open it. If FUSE is unavailable,
 run it with `--appimage-extract-and-run`.
@@ -51,7 +56,9 @@ requires a working native keyring. See [installation and troubleshooting](docs/i
 A **YouTube link found** status means a link was found in USDB comments, not that
 YouTube playback has been verified. **Check on download** is not an exclusion:
 TXT metadata may supply a usable source. Actual media availability is established
-when downloading. Private, removed or restricted media can still fail.
+when downloading. Private, removed or restricted media can still fail. Failed
+items remain in the queue for retry; incomplete staging files are cleaned up.
+The app does not substitute a different video automatically.
 
 ## Development
 
@@ -92,3 +99,9 @@ The application supports YouTube media sources, not every external source on USD
 Site changes can require updates. Song replacement is staged with crash recovery;
 it is not a guarantee against power loss. Different versions with the same artist
 and title share a destination name: a queue rejects two jobs targeting that same folder.
+
+## Reporting problems
+
+[Open an issue](https://github.com/finhai/Linux-USDB-Scrapper/issues) with your OS,
+app version, song ID, and the visible error message. Never include passwords or
+session cookies.

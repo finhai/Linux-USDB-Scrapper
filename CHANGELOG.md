@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.0.0 — release candidate build
+## 1.0.0 — 2026-10-26
+
+- Use the same purple music icon for the application window/taskbar and AppImage.
 
 - Display search listings immediately, with background covers/source hints and no early exclusions.
 - Cache search metadata for 15 minutes; add Refresh and replacement/cancellation of searches.

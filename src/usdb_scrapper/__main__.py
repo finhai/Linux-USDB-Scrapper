@@ -38,13 +38,22 @@ def main() -> int:
         app_logger.addHandler(handler)
     app_logger.setLevel(logging.INFO)
     app_logger.propagate = False
+    from importlib.resources import files
+
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
     from usdb_scrapper.frontend.window import MainWindow
 
-    app = QApplication(sys.argv[:1])
+    app = QApplication([sys.argv[0], "-name", "usdb-scrapper"])
     app.setApplicationName("USDB Scrapper")
     app.setApplicationVersion(__version__)
+    app.setDesktopFileName("usdb-scrapper")
+    icon = QIcon(str(files("usdb_scrapper").joinpath("frontend/assets/usdb-scrapper.svg")))
+    # Raster sizes also supply the native taskbar icon on X11 and Windows.
+    for size in (16, 32, 48, 64, 128, 256):
+        icon.addPixmap(icon.pixmap(size, size))
+    app.setWindowIcon(icon)
     window = MainWindow(restore_login=not args.smoke_test)
     window.show()
     if args.smoke_test:

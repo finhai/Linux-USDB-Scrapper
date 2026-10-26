@@ -219,3 +219,6 @@ __marimo__/
 
 # Local external media tools
 .tools/
+
+# Test temporary directories when system temp is unavailable
+pytest-of-*/

@@ -116,17 +116,12 @@ def main() -> None:
         (appdir / "AppRun").chmod(0o755)
         (appdir / "usdb-scrapper.desktop").write_text(
             "[Desktop Entry]\nName=USDB Scrapper\nExec=USDB-Scrapper\n"
-            "Icon=usdb-scrapper\nType=Application\nCategories=AudioVideo;Audio;\nTerminal=false\n",
+            "Icon=usdb-scrapper\nStartupWMClass=usdb-scrapper\nType=Application\nCategories=AudioVideo;Audio;\nTerminal=false\n",
             encoding="utf-8",
         )
-        (appdir / "usdb-scrapper.svg").write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" '
-            'viewBox="0 0 256 256">'
-            '<rect width="256" height="256" rx="48" fill="#241735"/>'
-            '<path d="M104 65v114m0-99 83-17v99" fill="none" stroke="#b789f4" stroke-width="18"/>'
-            '<ellipse cx="83" cy="180" rx="30" ry="22" fill="#72dfc0"/>'
-            '<ellipse cx="166" cy="164" rx="30" ry="22" fill="#72dfc0"/></svg>',
-            encoding="utf-8",
+        shutil.copyfile(
+            ROOT / "src/usdb_scrapper/frontend/assets/usdb-scrapper.svg",
+            appdir / "usdb-scrapper.svg",
         )
         tool = download(
             "https://github.com/AppImage/appimagetool/releases/download/1.9.1/"
@@ -134,7 +129,8 @@ def main() -> None:
             "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0",
         )
         tool.chmod(0o755)
-        artifact = DIST / f"USDB-Scrapper-{__version__}-x86_64.AppImage"
+        destination = DIST / f"USDB-Scrapper-{__version__}-x86_64.AppImage"
+        artifact = destination.with_name(destination.stem + ".building.AppImage")
         subprocess.run(
             [str(tool), "--appimage-extract-and-run", str(appdir), str(artifact)],
             check=True,
@@ -148,6 +144,8 @@ def main() -> None:
                 timeout=120,
                 env=environment,
             )
+        artifact.replace(destination)
+        artifact = destination
     with artifact.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
     artifact.with_suffix(artifact.suffix + ".sha256").write_text(

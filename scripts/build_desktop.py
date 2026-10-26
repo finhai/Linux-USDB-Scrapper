@@ -21,6 +21,8 @@ subprocess.run(
         "yt_dlp",
         "--collect-all",
         "yt_dlp_ejs",
+        "--collect-data",
+        "usdb_scrapper",
         "--copy-metadata",
         "usdb-scrapper-linux",
         "--hidden-import",
