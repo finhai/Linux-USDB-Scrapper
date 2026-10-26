@@ -19,3 +19,10 @@ Python, Qt, yt-dlp, FFmpeg and ffprobe are bundled. SHA-256 checksum files accom
 539 automated tests, formatting, lint and type checks pass. Native Linux/Windows package checks and Debian/Fedora startup checks are automated. Live USDB downloads and UltraStar playback were tested on Linux; interactive Windows playback is not independently verified.
 
 A YouTube link found in comments does not guarantee availability. Private, removed or restricted videos can fail at download time; failed items can be retried. Different versions with identical artist/title names share a destination folder. A USDB account and internet connection are required.
+
+## Development disclaimer
+
+This software was completely vibe coded as an experiment to test the capabilities
+of AI-assisted development. It is based on an earlier, less polished version I
+made myself and chose not to continue working on.
+

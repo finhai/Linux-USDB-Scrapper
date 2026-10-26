@@ -60,6 +60,12 @@ when downloading. Private, removed or restricted media can still fail. Failed
 items remain in the queue for retry; incomplete staging files are cleaned up.
 The app does not substitute a different video automatically.
 
+## Development disclaimer
+
+This software was completely vibe coded as an experiment to test the capabilities
+of AI-assisted development. It is based on an earlier, less polished version I
+made myself and chose not to continue working on.
+
 ## Development
 
 Install Git and [uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
